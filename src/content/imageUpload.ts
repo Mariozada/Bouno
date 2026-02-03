@@ -1,8 +1,3 @@
-/**
- * Image Upload Handler
- * Handles uploading images to file inputs and drag targets
- */
-
 import { getElementByRef } from './elementRefs'
 
 interface UploadResult {
@@ -12,9 +7,6 @@ interface UploadResult {
   error?: string
 }
 
-/**
- * Convert data URL to File object
- */
 function dataUrlToFile(dataUrl: string, filename: string): File {
   const [header, base64] = dataUrl.split(',')
   const mimeMatch = header.match(/:(.*?);/)
@@ -30,9 +22,6 @@ function dataUrlToFile(dataUrl: string, filename: string): File {
   return new File([blob], filename, { type: mime })
 }
 
-/**
- * Handle UPLOAD_IMAGE request
- */
 export function handleUploadImage(params: {
   dataUrl: string
   ref?: string
@@ -56,7 +45,6 @@ export function handleUploadImage(params: {
       return { error: 'Target element not found' }
     }
 
-    // If it's a file input, set files directly
     if (targetElement.tagName === 'INPUT' && (targetElement as HTMLInputElement).type === 'file') {
       const dataTransfer = new DataTransfer()
       dataTransfer.items.add(file)
@@ -65,7 +53,6 @@ export function handleUploadImage(params: {
       return { success: true, method: 'file_input', filename }
     }
 
-    // Otherwise, simulate drag and drop
     const dropDataTransfer = new DataTransfer()
     dropDataTransfer.items.add(file)
 

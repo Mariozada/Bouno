@@ -1,9 +1,15 @@
+/**
+ * Vite config for Side Panel UI
+ *
+ * Builds the React-based side panel with ES modules and code splitting enabled.
+ * This runs first and clears the dist directory.
+ */
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import { copyFileSync, existsSync, rmSync } from 'fs'
-
-const __dirname = import.meta.dirname
+import { resolveConfig, __dirname } from './vite.config.shared'
 
 export default defineConfig({
   plugins: [
@@ -19,6 +25,7 @@ export default defineConfig({
         // Move sidepanel.html from dist/src to dist/
         if (existsSync(srcPath)) {
           copyFileSync(srcPath, destPath)
+          console.log('  Moved sidepanel.html to dist/')
         }
 
         // Remove the src directory
@@ -36,34 +43,17 @@ export default defineConfig({
       },
     },
   ],
-  resolve: {
-    alias: {
-      '@shared': resolve(__dirname, 'src/shared'),
-      '@tools': resolve(__dirname, 'src/tools'),
-      '@background': resolve(__dirname, 'src/background'),
-      '@content': resolve(__dirname, 'src/content'),
-      '@cdp': resolve(__dirname, 'src/cdp'),
-      '@ui': resolve(__dirname, 'src/ui'),
-    }
-  },
+  resolve: resolveConfig,
   base: './',
   build: {
     outDir: 'dist',
-    emptyDirBeforeWrite: true,
+    emptyOutDir: true, // Only UI build clears the directory
     rollupOptions: {
       input: {
         sidepanel: resolve(__dirname, 'src/sidepanel.html'),
-        background: resolve(__dirname, 'src/background/index.ts'),
-        content: resolve(__dirname, 'src/content/index.ts'),
       },
       output: {
-        entryFileNames: (chunkInfo) => {
-          // Keep background and content at root level
-          if (chunkInfo.name === 'background' || chunkInfo.name === 'content') {
-            return '[name].js'
-          }
-          return 'assets/[name]-[hash].js'
-        },
+        entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
       },

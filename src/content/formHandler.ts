@@ -1,8 +1,3 @@
-/**
- * Form Handler
- * Handles form input operations
- */
-
 import { getElementByRef } from './elementRefs'
 
 interface FormInputResult {
@@ -12,9 +7,6 @@ interface FormInputResult {
   error?: string
 }
 
-/**
- * Handle FORM_INPUT request
- */
 export function handleFormInput(params: {
   ref: string
   value: string | boolean | number
@@ -31,7 +23,6 @@ export function handleFormInput(params: {
 
   try {
     if (tagName === 'select') {
-      // Handle select element
       const selectEl = element as HTMLSelectElement
       const option = Array.from(selectEl.options).find(
         opt => opt.value === value || opt.text === value
@@ -43,19 +34,16 @@ export function handleFormInput(params: {
       }
       selectEl.dispatchEvent(new Event('change', { bubbles: true }))
     } else if (inputType === 'checkbox' || inputType === 'radio') {
-      // Handle checkbox/radio
       const inputEl = element as HTMLInputElement
       inputEl.checked = Boolean(value)
       inputEl.dispatchEvent(new Event('change', { bubbles: true }))
     } else if (tagName === 'input' || tagName === 'textarea') {
-      // Handle text inputs
       const inputEl = element as HTMLInputElement | HTMLTextAreaElement
       inputEl.focus()
       inputEl.value = String(value)
       inputEl.dispatchEvent(new Event('input', { bubbles: true }))
       inputEl.dispatchEvent(new Event('change', { bubbles: true }))
     } else if ((element as HTMLElement).contentEditable === 'true') {
-      // Handle contentEditable
       const editableEl = element as HTMLElement
       editableEl.focus()
       editableEl.textContent = String(value)

@@ -1,23 +1,19 @@
-/**
- * Tools Module
- * Re-exports all tool-related functionality
- */
-
 export { registerTool, executeTool, getRegisteredTools, hasTool } from './registry'
 export { registerTabTools } from './tabs'
-export { registerPageReadingTools, detachCDP } from './pageReading'
+export { registerPageReadingTools } from './pageReading'
 export { registerInteractionTools, getScreenshot } from './interaction'
 export { registerDebuggingTools, addConsoleMessage, addNetworkRequest, clearTabData } from './debugging'
 export { registerMediaTools, addFrame } from './media'
 export { registerUiTools, getCurrentPlan, clearPlan } from './ui'
-export { registerShortcutsTools } from './shortcuts'
 
-/**
- * Register all tools
- *
- * Call this function to register all tool handlers.
- * The background script already does this individually.
- */
+// Import for use within this module
+import { registerTabTools } from './tabs'
+import { registerPageReadingTools } from './pageReading'
+import { registerInteractionTools } from './interaction'
+import { registerDebuggingTools } from './debugging'
+import { registerMediaTools } from './media'
+import { registerUiTools } from './ui'
+
 export function registerAllTools(): void {
   registerTabTools()
   registerPageReadingTools()
@@ -25,5 +21,4 @@ export function registerAllTools(): void {
   registerDebuggingTools()
   registerMediaTools()
   registerUiTools()
-  registerShortcutsTools()
 }

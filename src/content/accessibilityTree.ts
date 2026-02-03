@@ -1,26 +1,9 @@
-/**
- * Accessibility Tree Generator
- *
- * Creates a text representation of the page's accessibility tree.
- * Based on Claude's browser extension format for LLM consumption.
- *
- * Output format:
- *   link "Home" [ref_1] href="/"
- *    navigation [ref_2]
- *     link "About" [ref_3] href="/about"
- */
-
 import { DEFAULT_TREE_DEPTH, MAX_OUTPUT_CHARS } from '@shared/constants'
-
-// ============================================================================
-// Global Element Map (WeakRef for garbage collection)
-// ============================================================================
 
 interface ElementMap {
   [key: string]: WeakRef<Element>
 }
 
-// Initialize global element map
 declare global {
   interface Window {
     __browseRunElementMap: ElementMap
@@ -31,16 +14,12 @@ declare global {
 window.__browseRunElementMap = window.__browseRunElementMap || {}
 window.__browseRunRefCounter = window.__browseRunRefCounter || 0
 
-/**
- * Get element by ref_id
- */
 export function getElementByRef(refId: string): Element | null {
   const weakRef = window.__browseRunElementMap[refId]
   if (!weakRef) return null
 
   const element = weakRef.deref()
   if (!element) {
-    // Element was garbage collected
     delete window.__browseRunElementMap[refId]
     return null
   }
@@ -48,24 +27,14 @@ export function getElementByRef(refId: string): Element | null {
   return element
 }
 
-/**
- * Clear all refs (call on page navigation)
- */
 export function clearRefs(): void {
   window.__browseRunElementMap = {}
   window.__browseRunRefCounter = 0
 }
 
-/**
- * Get ref count
- */
 export function getRefCount(): number {
   return Object.keys(window.__browseRunElementMap).length
 }
-
-// ============================================================================
-// Role Detection
-// ============================================================================
 
 const ROLE_MAP: Record<string, string | ((el: Element) => string)> = {
   a: 'link',
@@ -103,7 +72,6 @@ const ROLE_MAP: Record<string, string | ((el: Element) => string)> = {
 }
 
 export function getRole(element: Element): string {
-  // Check explicit role first
   const explicitRole = element.getAttribute('role')
   if (explicitRole) return explicitRole
 
@@ -120,14 +88,9 @@ export function getRole(element: Element): string {
   return 'generic'
 }
 
-// ============================================================================
-// Accessible Name Detection
-// ============================================================================
-
 export function getAccessibleName(element: Element): string {
   const tagName = element.tagName.toLowerCase()
 
-  // Handle select elements specially
   if (tagName === 'select') {
     const select = element as HTMLSelectElement
     const selectedOption = select.querySelector('option[selected]') ||
@@ -137,31 +100,25 @@ export function getAccessibleName(element: Element): string {
     }
   }
 
-  // Check aria-label
   const ariaLabel = element.getAttribute('aria-label')
   if (ariaLabel?.trim()) return ariaLabel.trim()
 
-  // Check placeholder
   const placeholder = element.getAttribute('placeholder')
   if (placeholder?.trim()) return placeholder.trim()
 
-  // Check title
   const title = element.getAttribute('title')
   if (title?.trim()) return title.trim()
 
-  // Check alt (for images)
   const alt = element.getAttribute('alt')
   if (alt?.trim()) return alt.trim()
 
-  // Check associated label
   if (element.id) {
-    const label = document.querySelector(`label[for="${CSS.escape(element.id)}"]`)
+    const label = document.querySelector(`label[for="${element.id}"]`)
     if (label?.textContent?.trim()) {
       return label.textContent.trim()
     }
   }
 
-  // Handle input elements
   if (tagName === 'input') {
     const input = element as HTMLInputElement
     const inputType = input.type || ''
@@ -174,7 +131,6 @@ export function getAccessibleName(element: Element): string {
     }
   }
 
-  // Handle buttons, links, and summary elements
   if (['button', 'a', 'summary'].includes(tagName)) {
     let textContent = ''
     for (const child of element.childNodes) {
@@ -185,7 +141,6 @@ export function getAccessibleName(element: Element): string {
     if (textContent.trim()) return textContent.trim()
   }
 
-  // Handle headings
   if (/^h[1-6]$/.test(tagName)) {
     const text = element.textContent
     if (text?.trim()) {
@@ -193,10 +148,8 @@ export function getAccessibleName(element: Element): string {
     }
   }
 
-  // Images without alt return empty
   if (tagName === 'img') return ''
 
-  // Try direct text content
   let directText = ''
   for (const child of element.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
@@ -210,10 +163,6 @@ export function getAccessibleName(element: Element): string {
 
   return ''
 }
-
-// ============================================================================
-// Visibility Detection
-// ============================================================================
 
 export function isVisible(element: Element): boolean {
   try {
@@ -237,10 +186,6 @@ function isInViewport(element: Element): boolean {
          rect.right > 0
 }
 
-// ============================================================================
-// Interactivity Detection
-// ============================================================================
-
 export function isInteractive(element: Element): boolean {
   const tagName = element.tagName.toLowerCase()
   return ['a', 'button', 'input', 'select', 'textarea', 'details', 'summary'].includes(tagName) ||
@@ -257,10 +202,6 @@ function isLandmark(element: Element): boolean {
          element.getAttribute('role') !== null
 }
 
-// ============================================================================
-// Tree Building
-// ============================================================================
-
 const SKIP_TAGS = ['script', 'style', 'meta', 'link', 'title', 'noscript']
 
 interface ProcessOptions {
@@ -271,32 +212,12 @@ interface ProcessOptions {
 function shouldInclude(element: Element, options: ProcessOptions): boolean {
   const tagName = element.tagName.toLowerCase()
 
-  // Skip non-content elements
-  if (SKIP_TAGS.includes(tagName)) {
-    return false
-  }
+  if (SKIP_TAGS.includes(tagName)) return false
+  if (options.filter !== 'all' && element.getAttribute('aria-hidden') === 'true') return false
+  if (options.filter !== 'all' && !isVisible(element)) return false
+  if (options.filter !== 'all' && !options.refId && !isInViewport(element)) return false
+  if (options.filter === 'interactive') return isInteractive(element)
 
-  // Skip aria-hidden unless showing all
-  if (options.filter !== 'all' && element.getAttribute('aria-hidden') === 'true') {
-    return false
-  }
-
-  // Skip invisible elements unless showing all
-  if (options.filter !== 'all' && !isVisible(element)) {
-    return false
-  }
-
-  // Skip elements outside viewport (unless targeting specific ref)
-  if (options.filter !== 'all' && !options.refId) {
-    if (!isInViewport(element)) return false
-  }
-
-  // For interactive filter, only include interactive elements
-  if (options.filter === 'interactive') {
-    return isInteractive(element)
-  }
-
-  // Include if interactive, landmark, has accessible name, or has meaningful role
   if (isInteractive(element)) return true
   if (isLandmark(element)) return true
   if (getAccessibleName(element).length > 0) return true
@@ -306,7 +227,6 @@ function shouldInclude(element: Element, options: ProcessOptions): boolean {
 }
 
 export function assignRef(element: Element): string {
-  // Check if element already has a ref
   for (const id in window.__browseRunElementMap) {
     const weakRef = window.__browseRunElementMap[id]
     if (weakRef.deref() === element) {
@@ -314,7 +234,6 @@ export function assignRef(element: Element): string {
     }
   }
 
-  // Create new ref
   const refId = 'ref_' + (++window.__browseRunRefCounter)
   window.__browseRunElementMap[refId] = new WeakRef(element)
   return refId
@@ -337,7 +256,6 @@ function processElement(
     const name = getAccessibleName(element)
     const refId = assignRef(element)
 
-    // Build output line
     let line = ' '.repeat(currentDepth) + role
     if (name) {
       const sanitizedName = name.replace(/\s+/g, ' ').substring(0, 100).replace(/"/g, '\\"')
@@ -345,7 +263,6 @@ function processElement(
     }
     line += ` [${refId}]`
 
-    // Add useful attributes
     const href = element.getAttribute('href')
     if (href) {
       line += ` href="${href}"`
@@ -359,20 +276,9 @@ function processElement(
       line += ` placeholder="${placeholder}"`
     }
 
-    // Add checked state
-    if ((element as HTMLInputElement).checked) {
-      line += ' checked'
-    }
-
-    // Add disabled state
-    if ((element as HTMLInputElement).disabled) {
-      line += ' disabled'
-    }
-
     output.push(line)
   }
 
-  // Process children
   if (element.children && currentDepth < maxDepth) {
     for (const child of element.children) {
       processElement(
@@ -385,10 +291,6 @@ function processElement(
     }
   }
 }
-
-// ============================================================================
-// Public API
-// ============================================================================
 
 export interface ReadPageParams {
   depth?: number
@@ -403,16 +305,12 @@ export interface ReadPageResult {
   error?: string
 }
 
-/**
- * Handle READ_PAGE request
- */
 export function handleReadPage(params: ReadPageParams): ReadPageResult {
   const { depth = DEFAULT_TREE_DEPTH, filter = 'all', ref_id } = params
   const output: string[] = []
   const options: ProcessOptions = { filter, refId: ref_id }
 
   try {
-    // Handle targeting specific element by ref_id
     if (ref_id) {
       const weakRef = window.__browseRunElementMap[ref_id]
       if (!weakRef) {
@@ -434,13 +332,11 @@ export function handleReadPage(params: ReadPageParams): ReadPageResult {
       }
       processElement(element, 0, depth, options, output)
     } else {
-      // Process entire body
       if (document.body) {
         processElement(document.body, 0, depth, options, output)
       }
     }
 
-    // Cleanup dead WeakRefs
     for (const id in window.__browseRunElementMap) {
       if (!window.__browseRunElementMap[id].deref()) {
         delete window.__browseRunElementMap[id]
@@ -449,7 +345,6 @@ export function handleReadPage(params: ReadPageParams): ReadPageResult {
 
     const pageContent = output.join('\n')
 
-    // Check size limit
     if (pageContent.length > MAX_OUTPUT_CHARS) {
       let errorMsg = `Output exceeds ${MAX_OUTPUT_CHARS} character limit (${pageContent.length} characters). `
       if (ref_id) {
@@ -483,17 +378,20 @@ export function handleReadPage(params: ReadPageParams): ReadPageResult {
   }
 }
 
-/**
- * Handle GET_PAGE_TEXT request - extract readable text
- */
-export function handleGetPageText(): { text: string; length: number } {
-  // Prioritize article/main content
+export function handleGetPageText(): { title: string; url: string; source: string; text: string } {
   const article = document.querySelector('article')
   const main = document.querySelector('main')
   const content = article || main || document.body
 
-  let text = content.innerText || content.textContent || ''
+  let text = (content as HTMLElement).innerText || content.textContent || ''
   text = text.replace(/\s+/g, ' ').trim()
 
-  return { text, length: text.length }
+  const source = article ? 'article' : main ? 'main' : 'body'
+
+  return {
+    title: document.title,
+    url: window.location.href,
+    source,
+    text
+  }
 }

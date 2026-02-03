@@ -1,8 +1,3 @@
-/**
- * Element Finder
- * Natural language element search implementation
- */
-
 import { assignRef } from './elementRefs'
 import { getRole, getAccessibleName, isVisible, isInteractive } from './accessibilityTree'
 import { MAX_FIND_RESULTS } from '@shared/constants'
@@ -28,9 +23,6 @@ interface FindResult {
   interactive: boolean
 }
 
-/**
- * Handle FIND_ELEMENTS request
- */
 export function handleFindElements(params: { query: string }): {
   elements: FindResult[]
   count: number
@@ -42,9 +34,7 @@ export function handleFindElements(params: { query: string }): {
   const results: SearchResult[] = []
   const seen = new Set<Element>()
 
-  // Search strategies with different scoring
   const searchStrategies: Array<() => SearchResult[]> = [
-    // Text content match
     () => {
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
       const matches: SearchResult[] = []
@@ -60,7 +50,6 @@ export function handleFindElements(params: { query: string }): {
       return matches
     },
 
-    // aria-label match
     () => {
       return Array.from(document.querySelectorAll('[aria-label]'))
         .filter(el => {
@@ -73,7 +62,6 @@ export function handleFindElements(params: { query: string }): {
         })
     },
 
-    // placeholder match
     () => {
       return Array.from(document.querySelectorAll('[placeholder]'))
         .filter(el => {
@@ -86,7 +74,6 @@ export function handleFindElements(params: { query: string }): {
         })
     },
 
-    // title match
     () => {
       return Array.from(document.querySelectorAll('[title]'))
         .filter(el => {
@@ -99,7 +86,6 @@ export function handleFindElements(params: { query: string }): {
         })
     },
 
-    // Role-based search (e.g., "button", "link", "search")
     () => {
       const roleKeywords = ['button', 'link', 'input', 'search', 'menu', 'dialog', 'tab', 'checkbox', 'radio']
       const matchedRole = roleKeywords.find(r => queryLower.includes(r))
@@ -115,12 +101,10 @@ export function handleFindElements(params: { query: string }): {
     }
   ]
 
-  // Run all strategies
   for (const strategy of searchStrategies) {
     results.push(...strategy())
   }
 
-  // Sort by score (higher is better) and visibility
   results.sort((a, b) => {
     const aVisible = isVisible(a.element) ? 1 : 0
     const bVisible = isVisible(b.element) ? 1 : 0
@@ -128,7 +112,6 @@ export function handleFindElements(params: { query: string }): {
     return b.score - a.score
   })
 
-  // Take top results and assign refs
   const topResults = results.slice(0, MAX_FIND_RESULTS)
   const elements: FindResult[] = topResults.map(r => {
     const el = r.element

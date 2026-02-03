@@ -1,21 +1,55 @@
-/**
- * Element Interaction Tools
- * Handles: form_input, computer, upload_image
- */
+/** Element Interaction Tools: form_input, computer, upload_image */
 
 import { registerTool } from './registry'
 import { MessageTypes } from '@shared/messages'
 import type { Screenshot } from '@shared/types'
 import { MAX_SCREENSHOTS } from '@shared/constants'
 
-// In-memory storage for screenshots
 const screenshotStore = new Map<string, Screenshot>()
 let screenshotCounter = 0
 
-/**
- * Send message to content script
- */
+async function ensureContentScriptInjected(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId)
+
+  if (!tab.url) {
+    throw new Error('Cannot access tab: no URL (tab may still be loading)')
+  }
+
+  if (tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('about:') ||
+      tab.url.startsWith('edge://') ||
+      tab.url.startsWith('brave://')) {
+    throw new Error(`Cannot access restricted page: ${tab.url.split('/')[0]}//...`)
+  }
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { type: 'PING' }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+        } else {
+          resolve()
+        }
+      })
+    })
+  } catch {
+    console.log('BrowseRun: Injecting content script into tab', tabId)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      })
+      await new Promise(resolve => setTimeout(resolve, 150))
+    } catch (err) {
+      throw new Error(`Failed to inject content script: ${(err as Error).message}`)
+    }
+  }
+}
+
 async function sendToContentScript<T>(tabId: number, message: unknown): Promise<T> {
+  await ensureContentScriptInjected(tabId)
+
   return new Promise((resolve, reject) => {
     chrome.tabs.sendMessage(tabId, message, (response: T & { error?: string }) => {
       if (chrome.runtime.lastError) {
@@ -29,9 +63,6 @@ async function sendToContentScript<T>(tabId: number, message: unknown): Promise<
   })
 }
 
-/**
- * form_input - Set values in form elements
- */
 async function formInput(params: {
   ref: string
   value: string | boolean | number
@@ -50,9 +81,6 @@ async function formInput(params: {
   })
 }
 
-/**
- * Take a screenshot of the visible tab
- */
 async function takeScreenshot(tabId: number): Promise<{
   imageId: string
   dataUrl: string
@@ -62,10 +90,8 @@ async function takeScreenshot(tabId: number): Promise<{
   const tab = await chrome.tabs.get(tabId)
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' })
 
-  // Generate unique ID
   const imageId = `screenshot_${++screenshotCounter}_${Date.now()}`
 
-  // Store the screenshot
   screenshotStore.set(imageId, {
     imageId,
     dataUrl,
@@ -75,7 +101,6 @@ async function takeScreenshot(tabId: number): Promise<{
     height: tab.height
   })
 
-  // Clean up old screenshots
   if (screenshotStore.size > MAX_SCREENSHOTS) {
     const oldestKey = screenshotStore.keys().next().value
     if (oldestKey) screenshotStore.delete(oldestKey)
@@ -89,16 +114,10 @@ async function takeScreenshot(tabId: number): Promise<{
   }
 }
 
-/**
- * Get stored screenshot by ID
- */
 export function getScreenshot(imageId: string): Screenshot | undefined {
   return screenshotStore.get(imageId)
 }
 
-/**
- * computer - Mouse, keyboard, and screenshot actions
- */
 async function computer(params: {
   action: string
   tabId: number
@@ -118,7 +137,6 @@ async function computer(params: {
   if (!tabId) throw new Error('tabId is required')
   if (!action) throw new Error('action is required')
 
-  // Actions handled by background script
   switch (action) {
     case 'screenshot': {
       return takeScreenshot(tabId)
@@ -150,7 +168,6 @@ async function computer(params: {
       return { waited: waitTime / 1000 }
     }
 
-    // Actions delegated to content script
     default: {
       return sendToContentScript(tabId, {
         type: MessageTypes.COMPUTER_ACTION,
@@ -168,9 +185,6 @@ async function computer(params: {
   }
 }
 
-/**
- * upload_image - Upload image to file input or drag target
- */
 async function uploadImage(params: {
   imageId: string
   tabId: number
@@ -197,9 +211,6 @@ async function uploadImage(params: {
   })
 }
 
-/**
- * Register interaction tools
- */
 export function registerInteractionTools(): void {
   registerTool('form_input', formInput as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('computer', computer as (params: Record<string, unknown>) => Promise<unknown>)

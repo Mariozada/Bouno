@@ -1,14 +1,8 @@
-/**
- * Tab Management Tools
- * Handles: tabs_context, tabs_create, navigate, resize_window, web_fetch
- */
+/** Tab Management Tools: tabs_context, tabs_create, navigate, resize_window, web_fetch */
 
 import { registerTool } from './registry'
 import type { TabInfo } from '@shared/types'
 
-/**
- * tabs_context - Get context information about all tabs
- */
 async function tabsContext(): Promise<{ tabs: TabInfo[] }> {
   const tabs = await chrome.tabs.query({})
 
@@ -26,9 +20,6 @@ async function tabsContext(): Promise<{ tabs: TabInfo[] }> {
   }
 }
 
-/**
- * tabs_create - Create a new empty tab
- */
 async function tabsCreate(params: { url?: string }): Promise<TabInfo> {
   const tab = await chrome.tabs.create({
     active: true,
@@ -44,9 +35,6 @@ async function tabsCreate(params: { url?: string }): Promise<TabInfo> {
   }
 }
 
-/**
- * navigate - Navigate to a URL or go back/forward
- */
 async function navigate(params: { url: string; tabId: number }): Promise<{
   id: number
   url: string
@@ -63,7 +51,6 @@ async function navigate(params: { url: string; tabId: number }): Promise<{
     throw new Error('url is required')
   }
 
-  // Handle special navigation commands
   if (url === 'back') {
     await chrome.tabs.goBack(tabId)
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -78,13 +65,11 @@ async function navigate(params: { url: string; tabId: number }): Promise<{
     return { id: tab.id!, url: tab.url || '', title: tab.title || '' }
   }
 
-  // Normalize URL (add https:// if no protocol)
   let normalizedUrl = url
   if (!url.match(/^[a-zA-Z]+:\/\//)) {
     normalizedUrl = 'https://' + url
   }
 
-  // Navigate to URL
   await chrome.tabs.update(tabId, { url: normalizedUrl })
   await new Promise(resolve => setTimeout(resolve, 100))
 
@@ -97,9 +82,6 @@ async function navigate(params: { url: string; tabId: number }): Promise<{
   }
 }
 
-/**
- * resize_window - Resize browser window
- */
 async function resizeWindow(params: {
   width: number
   height: number
@@ -120,7 +102,6 @@ async function resizeWindow(params: {
     throw new Error('width and height are required')
   }
 
-  // Get the window ID for this tab
   const tab = await chrome.tabs.get(tabId)
   const windowId = tab.windowId
 
@@ -138,9 +119,6 @@ async function resizeWindow(params: {
   }
 }
 
-/**
- * web_fetch - Fetch content from a URL
- */
 async function webFetch(params: { url: string }): Promise<{
   url: string
   status: number
@@ -166,7 +144,6 @@ async function webFetch(params: { url: string }): Promise<{
       content = await response.text()
     }
 
-    // Truncate content if too large
     const maxLength = 50000
     if (content.length > maxLength) {
       content = content.substring(0, maxLength) + '\n...[truncated]'
@@ -184,9 +161,6 @@ async function webFetch(params: { url: string }): Promise<{
   }
 }
 
-/**
- * Register all tab tools
- */
 export function registerTabTools(): void {
   registerTool('tabs_context', tabsContext)
   registerTool('tabs_create', tabsCreate as (params: Record<string, unknown>) => Promise<unknown>)

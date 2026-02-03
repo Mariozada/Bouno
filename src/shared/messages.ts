@@ -1,10 +1,4 @@
-/**
- * Message type constants for communication between
- * background script, content script, and side panel
- */
-
 export const MessageTypes = {
-  // Content script messages
   READ_PAGE: 'READ_PAGE',
   GET_PAGE_TEXT: 'GET_PAGE_TEXT',
   FIND_ELEMENTS: 'FIND_ELEMENTS',
@@ -14,13 +8,11 @@ export const MessageTypes = {
   GET_CONSOLE_MESSAGES: 'GET_CONSOLE_MESSAGES',
   CLEAR_CONSOLE_MESSAGES: 'CLEAR_CONSOLE_MESSAGES',
 
-  // Legacy content script messages (for side panel)
   GET_PAGE_INFO: 'GET_PAGE_INFO',
   HIGHLIGHT_TEXT: 'HIGHLIGHT_TEXT',
   GET_LINKS: 'GET_LINKS',
   GET_IMAGES: 'GET_IMAGES',
 
-  // Background script messages
   GET_TAB_INFO: 'GET_TAB_INFO',
   EXECUTE_SCRIPT: 'EXECUTE_SCRIPT',
   EXECUTE_TOOL: 'EXECUTE_TOOL',
@@ -30,7 +22,6 @@ export const MessageTypes = {
 
 export type MessageType = typeof MessageTypes[keyof typeof MessageTypes]
 
-// Message interfaces
 export interface BaseMessage {
   type: MessageType
 }
@@ -81,7 +72,6 @@ export interface ConsoleMessageData extends BaseMessage {
   }
 }
 
-// Helper to create typed messages
 export function createMessage<T extends BaseMessage>(message: T): T {
   return message
 }

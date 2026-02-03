@@ -1,9 +1,4 @@
-/**
- * BrowseRun Content Script
- *
- * Entry point that sets up message handlers and initializes modules.
- * This script runs in the context of web pages.
- */
+console.log('[BrowseRun:content] Content script file executing...')
 
 import { MessageTypes } from '@shared/messages'
 import { handleReadPage, handleGetPageText } from './accessibilityTree'
@@ -13,16 +8,22 @@ import { handleComputerAction } from './eventSimulator'
 import { setupConsoleCapture, getConsoleMessages, clearConsoleMessages } from './consoleCapture'
 import { handleUploadImage } from './imageUpload'
 
-console.log('BrowseRun: Content script loaded')
+console.log('[BrowseRun:content] All imports successful')
 
-// Initialize console capture
-setupConsoleCapture()
+try {
+  setupConsoleCapture()
+  console.log('[BrowseRun:content] Console capture initialized')
+} catch (e) {
+  console.error('[BrowseRun:content] Failed to setup console capture:', e)
+}
 
-// Message handler type
 type MessageHandler = (message: unknown) => unknown
 
-// Message handlers map
 const handlers: Record<string, MessageHandler> = {
+  'PING': () => {
+    return { pong: true }
+  },
+
   [MessageTypes.READ_PAGE]: (message) => {
     const { depth, filter, ref_id } = message as { depth?: number; filter?: 'all' | 'interactive'; ref_id?: string }
     return handleReadPage({ depth, filter, ref_id })
@@ -59,7 +60,6 @@ const handlers: Record<string, MessageHandler> = {
     return { success: true }
   },
 
-  // Legacy handlers for side panel compatibility
   [MessageTypes.GET_PAGE_INFO]: () => {
     return {
       title: document.title,
@@ -98,29 +98,43 @@ const handlers: Record<string, MessageHandler> = {
   }
 }
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type } = message as { type: string }
+console.log('[BrowseRun:content] Setting up message listener...')
+try {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    const { type } = message as { type: string }
+    console.log('[BrowseRun:content] Message received:', type)
 
-  const handler = handlers[type]
-  if (handler) {
-    try {
-      const result = handler(message)
-      sendResponse(result)
-    } catch (err) {
-      sendResponse({ error: (err as Error).message })
+    const handler = handlers[type]
+    if (handler) {
+      try {
+        console.log('[BrowseRun:content] Executing handler for:', type)
+        const result = handler(message)
+        console.log('[BrowseRun:content] Handler result:', typeof result)
+        sendResponse(result)
+      } catch (err) {
+        console.error('[BrowseRun:content] Handler error:', err)
+        sendResponse({ error: (err as Error).message })
+      }
+    } else {
+      console.warn('[BrowseRun:content] Unknown message type:', type)
+      sendResponse({ error: `Unknown message type: ${type}` })
     }
-  } else {
-    sendResponse({ error: `Unknown message type: ${type}` })
-  }
 
-  return true // Keep channel open for async response
-})
+    return true
+  })
+  console.log('[BrowseRun:content] Message listener registered successfully')
+} catch (listenerError) {
+  console.error('[BrowseRun:content] FATAL: Failed to register message listener:', listenerError)
+}
 
-// Notify background script that content script is ready
+console.log('[BrowseRun:content] Sending ready notification to background...')
 chrome.runtime.sendMessage({
   type: MessageTypes.CONTENT_SCRIPT_READY,
   url: window.location.href
-}).catch(() => {
-  // Ignore errors if background isn't ready yet
+}).then(() => {
+  console.log('[BrowseRun:content] Ready notification sent successfully')
+}).catch((err) => {
+  console.log('[BrowseRun:content] Ready notification failed (normal if background not ready):', err?.message)
 })
+
+console.log('[BrowseRun:content] Content script initialization complete')

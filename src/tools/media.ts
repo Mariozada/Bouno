@@ -1,18 +1,11 @@
-/**
- * Media Tools
- * Handles: gif_creator
- */
+/** Media Tools: gif_creator */
 
 import { registerTool } from './registry'
 import type { GifRecordingState, GifFrame } from '@shared/types'
 import { MAX_GIF_FRAMES } from '@shared/constants'
 
-// Recording state per tab
 const recordingState = new Map<number, GifRecordingState>()
 
-/**
- * Get or initialize recording state for a tab
- */
 function getRecordingState(tabId: number): GifRecordingState {
   if (!recordingState.has(tabId)) {
     recordingState.set(tabId, {
@@ -24,9 +17,6 @@ function getRecordingState(tabId: number): GifRecordingState {
   return recordingState.get(tabId)!
 }
 
-/**
- * Add a frame to recording (called by screenshot capture)
- */
 export function addFrame(tabId: number, dataUrl: string, action?: string): void {
   const state = getRecordingState(tabId)
   if (!state.recording) return
@@ -41,15 +31,11 @@ export function addFrame(tabId: number, dataUrl: string, action?: string): void 
     state.actions.push(action)
   }
 
-  // Limit frames
   if (state.frames.length > MAX_GIF_FRAMES) {
     state.frames.shift()
   }
 }
 
-/**
- * gif_creator - Manage GIF recording and export
- */
 async function gifCreator(params: {
   action: string
   tabId: number
@@ -171,9 +157,6 @@ async function gifCreator(params: {
   }
 }
 
-/**
- * Register media tools
- */
 export function registerMediaTools(): void {
   registerTool('gif_creator', gifCreator as (params: Record<string, unknown>) => Promise<unknown>)
 }

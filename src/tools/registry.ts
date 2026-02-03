@@ -1,60 +1,58 @@
-/**
- * Tool Registry
- * Central registration and dispatch for all tools
- */
-
 import type { ToolResult } from '@shared/types'
 
-// Tool handler type
 type ToolHandler<T = unknown> = (params: Record<string, unknown>) => Promise<T>
-
-// Registered tools
 const toolHandlers = new Map<string, ToolHandler>()
 
-/**
- * Register a tool handler
- */
 export function registerTool(name: string, handler: ToolHandler): void {
+  console.log(`[BrowseRun:registry] Registered tool: ${name}`)
   toolHandlers.set(name, handler)
 }
 
-/**
- * Execute a tool
- */
 export async function executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
+  console.log(`[BrowseRun:registry] executeTool called: ${name}`, params)
   const handler = toolHandlers.get(name)
 
   if (!handler) {
+    console.log(`[BrowseRun:registry] Unknown tool: ${name}`)
     return {
       success: false,
-      error: `Unknown tool: ${name}`
+      error: `Unknown tool: ${name}. Available tools: ${Array.from(toolHandlers.keys()).join(', ')}`
     }
   }
 
   try {
-    const result = await handler(params)
+    console.log(`[BrowseRun:registry] Executing handler for: ${name}`)
+    const result = await handler(params) as Record<string, unknown>
+
+    if (result && typeof result === 'object' && 'error' in result) {
+      console.log(`[BrowseRun:registry] Handler returned error:`, result.error)
+      return {
+        success: false,
+        error: result.error as string,
+        result: result
+      }
+    }
+
+    console.log(`[BrowseRun:registry] Handler success for: ${name}`)
     return {
       success: true,
       result
     }
   } catch (err) {
+    const error = err as Error & { _debugLogs?: string[] }
+    console.log(`[BrowseRun:registry] Handler threw error:`, error.message)
     return {
       success: false,
-      error: (err as Error).message || String(err)
+      error: error.message || String(err),
+      result: { _debugLogs: error._debugLogs || [`Exception: ${error.message}`] }
     }
   }
 }
 
-/**
- * Get list of registered tools
- */
 export function getRegisteredTools(): string[] {
   return Array.from(toolHandlers.keys())
 }
 
-/**
- * Check if a tool is registered
- */
 export function hasTool(name: string): boolean {
   return toolHandlers.has(name)
 }

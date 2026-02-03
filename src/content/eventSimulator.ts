@@ -1,8 +1,3 @@
-/**
- * Event Simulator
- * Simulates mouse and keyboard events
- */
-
 import { getElementByRef, assignRef } from './elementRefs'
 
 interface ModifierKeys {
@@ -38,9 +33,6 @@ interface ActionResult {
   error?: string
 }
 
-/**
- * Parse modifier string into modifier keys object
- */
 function parseModifiers(modifiers?: string): ModifierKeys {
   const result: ModifierKeys = {
     ctrl: false,
@@ -60,9 +52,6 @@ function parseModifiers(modifiers?: string): ModifierKeys {
   return result
 }
 
-/**
- * Get target element and coordinates
- */
 function getTarget(params: ComputerActionParams): {
   element: Element | null
   x: number
@@ -90,9 +79,6 @@ function getTarget(params: ComputerActionParams): {
   return { element: null, x: 0, y: 0 }
 }
 
-/**
- * Handle click actions (left, right, double, triple)
- */
 function handleClick(
   action: string,
   target: Element,
@@ -117,7 +103,6 @@ function handleClick(
     metaKey: modifierKeys.meta
   }
 
-  // Dispatch events
   target.dispatchEvent(new MouseEvent('mousedown', eventInit))
   target.dispatchEvent(new MouseEvent('mouseup', eventInit))
   target.dispatchEvent(new MouseEvent('click', { ...eventInit, detail: clickCount }))
@@ -130,7 +115,6 @@ function handleClick(
     target.dispatchEvent(new MouseEvent('dblclick', eventInit))
   }
 
-  // Focus if focusable
   if ('focus' in target && typeof target.focus === 'function') {
     (target as HTMLElement).focus()
   }
@@ -138,9 +122,6 @@ function handleClick(
   return { success: true, action, target: assignRef(target) }
 }
 
-/**
- * Handle type action
- */
 function handleType(text: string, target: Element | null): ActionResult {
   const typeTarget = target || document.activeElement
 
@@ -149,12 +130,10 @@ function handleType(text: string, target: Element | null): ActionResult {
   }
 
   if ('value' in typeTarget) {
-    // Input element
     const inputEl = typeTarget as HTMLInputElement
     inputEl.value += text
     inputEl.dispatchEvent(new Event('input', { bubbles: true }))
   } else if ((typeTarget as HTMLElement).contentEditable === 'true') {
-    // ContentEditable
     const selection = window.getSelection()
     if (selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0)
@@ -166,9 +145,6 @@ function handleType(text: string, target: Element | null): ActionResult {
   return { success: true, action: 'type', text }
 }
 
-/**
- * Handle key action
- */
 function handleKey(
   text: string,
   repeat: number,
@@ -210,16 +186,13 @@ function handleKey(
   return { success: true, action: 'key', keys: text, repeat }
 }
 
-/**
- * Handle scroll action
- */
 function handleScroll(
   direction: string,
   amount: number,
   target: Element | null
 ): ActionResult {
   const scrollTarget = target || document.documentElement
-  const scrollAmount = amount * 100 // Convert ticks to pixels
+  const scrollAmount = amount * 100
 
   const deltaMap: Record<string, { x: number; y: number }> = {
     'up': { x: 0, y: -scrollAmount },
@@ -242,9 +215,6 @@ function handleScroll(
   return { success: true, action: 'scroll', direction }
 }
 
-/**
- * Handle scroll_to action
- */
 function handleScrollTo(target: Element, ref: string): ActionResult {
   target.scrollIntoView({
     behavior: 'smooth',
@@ -255,9 +225,6 @@ function handleScrollTo(target: Element, ref: string): ActionResult {
   return { success: true, action: 'scroll_to', ref }
 }
 
-/**
- * Handle hover action
- */
 function handleHover(target: Element, x: number, y: number): ActionResult {
   target.dispatchEvent(new MouseEvent('mouseover', {
     bubbles: true,
@@ -278,9 +245,6 @@ function handleHover(target: Element, x: number, y: number): ActionResult {
   return { success: true, action: 'hover', target: assignRef(target) }
 }
 
-/**
- * Handle left_click_drag action
- */
 function handleDrag(
   startCoord: [number, number],
   endCoord: [number, number]
@@ -289,7 +253,6 @@ function handleDrag(
   const endElement = document.elementFromPoint(endCoord[0], endCoord[1])
 
   if (startElement) {
-    // Mouse down at start
     startElement.dispatchEvent(new MouseEvent('mousedown', {
       bubbles: true,
       clientX: startCoord[0],
@@ -297,14 +260,12 @@ function handleDrag(
       button: 0
     }))
 
-    // Mouse move to end
     document.dispatchEvent(new MouseEvent('mousemove', {
       bubbles: true,
       clientX: endCoord[0],
       clientY: endCoord[1]
     }))
 
-    // Mouse up at end
     const upTarget = endElement || document
     upTarget.dispatchEvent(new MouseEvent('mouseup', {
       bubbles: true,
@@ -322,9 +283,6 @@ function handleDrag(
   }
 }
 
-/**
- * Handle COMPUTER_ACTION request
- */
 export function handleComputerAction(params: ComputerActionParams): ActionResult {
   const { action, text, scroll_direction, scroll_amount = 3, start_coordinate, repeat = 1 } = params
 
