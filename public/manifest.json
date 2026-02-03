@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "BrowseRun",
+  "version": "1.0.0",
+  "description": "Browser automation extension with external API support",
+  "action": {
+    "default_title": "Open BrowseRun"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "sidePanel",
+    "scripting",
+    "webRequest",
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
