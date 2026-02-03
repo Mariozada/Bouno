@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "vite --config vite.config.ui.ts",
+    "build": "bun run build:ui && bun run build:content && bun run build:background",
+    "build:ui": "echo '=== Building UI ===' && vite build --config vite.config.ui.ts",
+    "build:content": "echo '=== Building Content Script ===' && vite build --config vite.config.content.ts",
+    "build:background": "echo '=== Building Background Script ===' && vite build --config vite.config.background.ts",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview --config vite.config.ui.ts"
   },
   "dependencies": {
     "react": "^19.2.0",

@@ -1,250 +1,240 @@
-/**
- * Page Reading Tools
- * Handles: read_page, get_page_text, find
- *
- * Uses CDP (Chrome DevTools Protocol) for accurate accessibility tree,
- * with fallback to content script when CDP is unavailable.
- */
+/** Page Reading Tools: read_page, get_page_text, find */
 
 import { registerTool } from './registry'
 import { MessageTypes } from '@shared/messages'
-import { DEFAULT_TREE_DEPTH, MAX_OUTPUT_CHARS } from '@shared/constants'
-import type { ElementRef } from '@shared/types'
+import { DEFAULT_TREE_DEPTH } from '@shared/constants'
 
-// CDP imports
-import {
-  fetchAllTrees,
-  mergeToEnhancedTree,
-  toElementRef,
-  getRefCount,
-  session
-} from '@cdp/index'
+class InjectionError extends Error {
+  logs: string[]
+  constructor(message: string, logs: string[]) {
+    super(message)
+    this.name = 'InjectionError'
+    this.logs = logs
+  }
+}
 
-// ============================================================================
-// Content Script Fallback
-// ============================================================================
+async function ensureContentScriptInjected(tabId: number): Promise<{ logs: string[] }> {
+  const logs: string[] = []
+  const log = (msg: string) => {
+    console.log(`[BrowseRun:inject] ${msg}`)
+    logs.push(msg)
+  }
 
-/**
- * Send message to content script and wait for response
- */
-async function sendToContentScript<T>(tabId: number, message: unknown): Promise<T> {
+  const throwWithLogs = (message: string): never => {
+    throw new InjectionError(message, logs)
+  }
+
+  log(`Starting injection check for tabId=${tabId}`)
+
+  let tab: chrome.tabs.Tab
+  try {
+    tab = await chrome.tabs.get(tabId)
+    log(`Tab info: id=${tab.id}, status=${tab.status}, url=${tab.url?.substring(0, 80)}`)
+  } catch (tabError) {
+    log(`ERROR: Failed to get tab: ${(tabError as Error).message}`)
+    return throwWithLogs(`Cannot get tab ${tabId}: ${(tabError as Error).message}`)
+  }
+
+  const tabUrl = tab.url
+  if (!tabUrl) {
+    log(`ERROR: Tab has no URL, status=${tab.status}`)
+    return throwWithLogs('Cannot access tab: no URL (tab may still be loading)')
+  }
+
+  if (tabUrl.startsWith('chrome://') ||
+      tabUrl.startsWith('chrome-extension://') ||
+      tabUrl.startsWith('about:') ||
+      tabUrl.startsWith('edge://') ||
+      tabUrl.startsWith('brave://')) {
+    log(`ERROR: Restricted URL: ${tabUrl}`)
+    return throwWithLogs(`Cannot access restricted page: ${tabUrl.split('/')[0]}//...`)
+  }
+
+  log(`URL is accessible, attempting ping...`)
+
+  try {
+    const pingResult = await new Promise<unknown>((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { type: 'PING' }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+        } else {
+          resolve(response)
+        }
+      })
+    })
+    log(`Ping SUCCESS: ${JSON.stringify(pingResult)}`)
+  } catch (pingError) {
+    log(`Ping FAILED: ${(pingError as Error).message}`)
+    log(`Attempting to inject content script...`)
+
+    try {
+      const injectionResult = await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      })
+      log(`Injection executeScript returned: ${JSON.stringify(injectionResult)}`)
+      log(`Waiting 300ms for script initialization...`)
+      await new Promise(resolve => setTimeout(resolve, 300))
+      log(`Verifying injection with second ping...`)
+      try {
+        const verifyResult = await new Promise<unknown>((resolve, reject) => {
+          chrome.tabs.sendMessage(tabId, { type: 'PING' }, (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message))
+            } else {
+              resolve(response)
+            }
+          })
+        })
+        log(`Verification ping SUCCESS: ${JSON.stringify(verifyResult)}`)
+      } catch (verifyError) {
+        log(`Verification ping FAILED: ${(verifyError as Error).message}`)
+        log(`This usually means the content script has a runtime error. Check the page's DevTools console.`)
+        throwWithLogs(`Content script injected but not responding: ${(verifyError as Error).message}`)
+      }
+    } catch (injectError) {
+      if (injectError instanceof InjectionError) {
+        throw injectError
+      }
+      log(`Injection FAILED: ${(injectError as Error).message}`)
+      throwWithLogs(`Failed to inject content script: ${(injectError as Error).message}`)
+    }
+  }
+
+  return { logs }
+}
+
+async function sendToContentScript<T>(tabId: number, message: unknown): Promise<T & { _debugLogs?: string[] }> {
+  const allLogs: string[] = []
+  const log = (msg: string) => {
+    console.log(`[BrowseRun:send] ${msg}`)
+    allLogs.push(msg)
+  }
+
+  log(`sendToContentScript called: tabId=${tabId}, message=${JSON.stringify(message)}`)
+
+  try {
+    const result = await ensureContentScriptInjected(tabId)
+    allLogs.push(...result.logs)
+    log(`Content script ready`)
+  } catch (injectionError) {
+    if (injectionError instanceof InjectionError) {
+      allLogs.push(...injectionError.logs)
+    }
+    log(`Injection error: ${(injectionError as Error).message}`)
+    const error = new Error((injectionError as Error).message)
+    ;(error as Error & { _debugLogs?: string[] })._debugLogs = allLogs
+    throw error
+  }
+
+  log(`Sending message to content script...`)
+
   return new Promise((resolve, reject) => {
     chrome.tabs.sendMessage(tabId, message, (response: T & { error?: string }) => {
       if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message))
+        log(`Message send ERROR: ${chrome.runtime.lastError.message}`)
+        const error = new Error(chrome.runtime.lastError.message)
+        ;(error as Error & { _debugLogs?: string[] })._debugLogs = allLogs
+        reject(error)
       } else if (response && response.error) {
-        reject(new Error(response.error))
+        log(`Response contained error: ${response.error}`)
+        const error = new Error(response.error)
+        ;(error as Error & { _debugLogs?: string[] })._debugLogs = allLogs
+        reject(error)
       } else {
-        resolve(response)
+        log(`Response received: ${JSON.stringify(response)?.substring(0, 200)}...`)
+        ;(response as T & { _debugLogs?: string[] })._debugLogs = allLogs
+        resolve(response as T & { _debugLogs?: string[] })
       }
     })
   })
 }
 
-/**
- * Read page via content script (fallback)
- */
-async function readPageViaContentScript(
-  tabId: number,
-  params: { depth?: number; filter?: 'all' | 'interactive'; ref_id?: string }
-): Promise<{ tree?: ElementRef | ElementRef[] | null; refCount?: number; source: 'content_script' }> {
-  const result = await sendToContentScript<{
-    tree?: ElementRef | ElementRef[] | null
-    refCount?: number
-    error?: string
-  }>(tabId, {
-    type: MessageTypes.READ_PAGE,
-    depth: params.depth,
-    filter: params.filter,
-    ref_id: params.ref_id
-  })
-
-  return {
-    ...result,
-    source: 'content_script'
-  }
-}
-
-// ============================================================================
-// CDP Implementation
-// ============================================================================
-
-/**
- * Check if CDP is available for a tab
- */
-async function canUseCDP(tabId: number): Promise<boolean> {
-  try {
-    // Try to get tab info - some special pages (chrome://, etc.) don't allow debugging
-    const tab = await chrome.tabs.get(tabId)
-
-    // Skip chrome:// and other special URLs
-    if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-      return false
-    }
-
-    return true
-  } catch {
-    return false
-  }
-}
-
-/**
- * Read page via CDP (primary method)
- */
-async function readPageViaCDP(
-  tabId: number,
-  params: { depth?: number; filter?: 'all' | 'interactive' }
-): Promise<{
-  tree?: ElementRef | ElementRef[] | null
-  refCount?: number
-  source: 'cdp'
-  truncated?: boolean
-  characterCount?: number
-  suggestion?: string
-}> {
-  const { depth = DEFAULT_TREE_DEPTH, filter = 'all' } = params
-
-  // Fetch all three trees in parallel
-  const fetchResult = await fetchAllTrees(tabId, {
-    depth: -1,  // Fetch full DOM, we'll limit during merge
-    pierce: true,
-    includeComputedStyles: true
-  })
-
-  // Merge into enhanced tree
-  const enhancedTree = mergeToEnhancedTree(fetchResult, {
-    depth,
-    filter,
-    clearRefsFirst: true
-  })
-
-  // Convert to ElementRef format for compatibility
-  let tree: ElementRef | ElementRef[] | null = null
-  if (enhancedTree) {
-    if (Array.isArray(enhancedTree)) {
-      tree = enhancedTree.map(toElementRef)
-    } else {
-      tree = toElementRef(enhancedTree)
-    }
-  }
-
-  // Check output size
-  const json = JSON.stringify(tree)
-  if (json.length > MAX_OUTPUT_CHARS) {
-    return {
-      tree: null,
-      refCount: getRefCount(),
-      source: 'cdp',
-      truncated: true,
-      characterCount: json.length,
-      suggestion: `Output exceeds ${MAX_OUTPUT_CHARS} characters. Try depth: ${Math.max(1, Math.floor(depth / 2))} or filter: 'interactive'`
-    }
-  }
-
-  return {
-    tree,
-    refCount: getRefCount(),
-    source: 'cdp'
-  }
-}
-
-// ============================================================================
-// Main API
-// ============================================================================
-
-/**
- * read_page - Get accessibility tree representation of page elements
- *
- * Uses CDP when available for accurate AX tree, shadow DOM, and iframe support.
- * Falls back to content script when CDP is unavailable.
- */
 async function readPage(params: {
   tabId: number
   depth?: number
   filter?: 'all' | 'interactive'
   ref_id?: string
-  force_content_script?: boolean  // For testing/debugging
 }): Promise<unknown> {
-  const { tabId, depth = DEFAULT_TREE_DEPTH, filter = 'all', ref_id, force_content_script = false } = params
+  const { tabId, depth = DEFAULT_TREE_DEPTH, filter = 'all', ref_id } = params
+  console.log(`[BrowseRun:read_page] Called with params:`, { tabId, depth, filter, ref_id })
 
   if (!tabId) {
-    throw new Error('tabId is required')
+    return { error: 'tabId is required', _debugLogs: ['ERROR: tabId is required'] }
   }
 
-  // If ref_id is provided, we need to use content script (CDP refs are different)
-  // TODO: Support ref_id with CDP by storing backendNodeId mapping
-  if (ref_id) {
-    return readPageViaContentScript(tabId, { depth, filter, ref_id })
-  }
-
-  // Try CDP first (unless forced to use content script)
-  if (!force_content_script) {
-    const cdpAvailable = await canUseCDP(tabId)
-
-    if (cdpAvailable) {
-      try {
-        const result = await readPageViaCDP(tabId, { depth, filter })
-        console.log('BrowseRun: read_page via CDP succeeded')
-        return result
-      } catch (err) {
-        console.warn('BrowseRun: CDP failed, falling back to content script:', err)
-        // Fall through to content script
-      }
+  try {
+    const result = await sendToContentScript(tabId, {
+      type: MessageTypes.READ_PAGE,
+      depth,
+      filter,
+      ref_id
+    })
+    console.log(`[BrowseRun:read_page] Success`)
+    return result
+  } catch (err) {
+    const error = err as Error & { _debugLogs?: string[] }
+    console.log(`[BrowseRun:read_page] Error:`, error.message)
+    return {
+      error: error.message,
+      _debugLogs: error._debugLogs || [`Caught error: ${error.message}`]
     }
   }
-
-  // Fallback to content script
-  console.log('BrowseRun: read_page via content script')
-  return readPageViaContentScript(tabId, { depth, filter })
 }
 
-/**
- * get_page_text - Extract raw text content from the page
- */
 async function getPageText(params: { tabId: number }): Promise<unknown> {
   const { tabId } = params
+  console.log(`[BrowseRun:get_page_text] Called with tabId=${tabId}`)
 
   if (!tabId) {
-    throw new Error('tabId is required')
+    return { error: 'tabId is required', _debugLogs: ['ERROR: tabId is required'] }
   }
 
-  // This always uses content script (simple text extraction)
-  return sendToContentScript(tabId, {
-    type: MessageTypes.GET_PAGE_TEXT
-  })
+  try {
+    const result = await sendToContentScript(tabId, {
+      type: MessageTypes.GET_PAGE_TEXT
+    })
+    console.log(`[BrowseRun:get_page_text] Success`)
+    return result
+  } catch (err) {
+    const error = err as Error & { _debugLogs?: string[] }
+    console.log(`[BrowseRun:get_page_text] Error:`, error.message)
+    return {
+      error: error.message,
+      _debugLogs: error._debugLogs || [`Caught error: ${error.message}`]
+    }
+  }
 }
 
-/**
- * find - Find elements using natural language query
- */
 async function find(params: { query: string; tabId: number }): Promise<unknown> {
   const { query, tabId } = params
+  console.log(`[BrowseRun:find] Called with params:`, { tabId, query })
 
   if (!tabId) {
-    throw new Error('tabId is required')
+    return { error: 'tabId is required', _debugLogs: ['ERROR: tabId is required'] }
   }
 
   if (!query) {
-    throw new Error('query is required')
+    return { error: 'query is required', _debugLogs: ['ERROR: query is required'] }
   }
 
-  // This always uses content script (search logic is there)
-  return sendToContentScript(tabId, {
-    type: MessageTypes.FIND_ELEMENTS,
-    query
-  })
+  try {
+    const result = await sendToContentScript(tabId, {
+      type: MessageTypes.FIND_ELEMENTS,
+      query
+    })
+    console.log(`[BrowseRun:find] Success, found elements`)
+    return result
+  } catch (err) {
+    const error = err as Error & { _debugLogs?: string[] }
+    console.log(`[BrowseRun:find] Error:`, error.message)
+    return {
+      error: error.message,
+      _debugLogs: error._debugLogs || [`Caught error: ${error.message}`]
+    }
+  }
 }
 
-/**
- * Detach CDP from a tab (for cleanup)
- */
-export async function detachCDP(tabId: number): Promise<void> {
-  await session.forceDetach(tabId)
-}
-
-/**
- * Register page reading tools
- */
 export function registerPageReadingTools(): void {
   registerTool('read_page', readPage as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('get_page_text', getPageText as (params: Record<string, unknown>) => Promise<unknown>)

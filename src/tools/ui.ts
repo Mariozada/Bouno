@@ -1,20 +1,13 @@
-/**
- * UI Signaling Tools
- * Handles: update_plan
- */
+/** UI Signaling Tools: update_plan */
 
 import { registerTool } from './registry'
 
-// Current plan storage
 let currentPlan: {
   approach: string
   domains: string[]
   createdAt: number
 } | null = null
 
-/**
- * update_plan - Present plan to user for approval
- */
 async function updatePlan(params: {
   approach: string
   domains: string[]
@@ -42,23 +35,14 @@ async function updatePlan(params: {
   }
 }
 
-/**
- * Get current plan
- */
 export function getCurrentPlan() {
   return currentPlan
 }
 
-/**
- * Clear current plan
- */
 export function clearPlan(): void {
   currentPlan = null
 }
 
-/**
- * Register UI signaling tools
- */
 export function registerUiTools(): void {
   registerTool('update_plan', updatePlan as (params: Record<string, unknown>) => Promise<unknown>)
 }

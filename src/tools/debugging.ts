@@ -1,21 +1,55 @@
-/**
- * Debugging Tools
- * Handles: read_console_messages, read_network_requests, javascript_tool
- */
+/** Debugging Tools: read_console_messages, read_network_requests, javascript_tool */
 
 import { registerTool } from './registry'
 import { MessageTypes } from '@shared/messages'
 import type { ConsoleMessage, NetworkRequest } from '@shared/types'
 import { MAX_CONSOLE_MESSAGES, MAX_NETWORK_REQUESTS } from '@shared/constants'
 
-// In-memory storage for console messages and network requests per tab
 const consoleMessagesStore = new Map<number, ConsoleMessage[]>()
 const networkRequestsStore = new Map<number, NetworkRequest[]>()
 
-/**
- * Send message to content script
- */
+async function ensureContentScriptInjected(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId)
+
+  if (!tab.url) {
+    throw new Error('Cannot access tab: no URL (tab may still be loading)')
+  }
+
+  if (tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('about:') ||
+      tab.url.startsWith('edge://') ||
+      tab.url.startsWith('brave://')) {
+    throw new Error(`Cannot access restricted page: ${tab.url.split('/')[0]}//...`)
+  }
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { type: 'PING' }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+        } else {
+          resolve()
+        }
+      })
+    })
+  } catch {
+    console.log('BrowseRun: Injecting content script into tab', tabId)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      })
+      await new Promise(resolve => setTimeout(resolve, 150))
+    } catch (err) {
+      throw new Error(`Failed to inject content script: ${(err as Error).message}`)
+    }
+  }
+}
+
 async function sendToContentScript<T>(tabId: number, message: unknown): Promise<T> {
+  await ensureContentScriptInjected(tabId)
+
   return new Promise((resolve, reject) => {
     chrome.tabs.sendMessage(tabId, message, (response: T & { error?: string }) => {
       if (chrome.runtime.lastError) {
@@ -29,9 +63,6 @@ async function sendToContentScript<T>(tabId: number, message: unknown): Promise<
   })
 }
 
-/**
- * Add console message from content script
- */
 export function addConsoleMessage(tabId: number, message: Omit<ConsoleMessage, 'timestamp'>): void {
   if (!consoleMessagesStore.has(tabId)) {
     consoleMessagesStore.set(tabId, [])
@@ -43,15 +74,11 @@ export function addConsoleMessage(tabId: number, message: Omit<ConsoleMessage, '
     timestamp: Date.now()
   } as ConsoleMessage)
 
-  // Keep last N messages per tab
   if (messages.length > MAX_CONSOLE_MESSAGES) {
     messages.shift()
   }
 }
 
-/**
- * Add network request
- */
 export function addNetworkRequest(tabId: number, request: Omit<NetworkRequest, 'timestamp'>): void {
   if (!networkRequestsStore.has(tabId)) {
     networkRequestsStore.set(tabId, [])
@@ -63,23 +90,16 @@ export function addNetworkRequest(tabId: number, request: Omit<NetworkRequest, '
     timestamp: Date.now()
   } as NetworkRequest)
 
-  // Keep last N requests per tab
   if (requests.length > MAX_NETWORK_REQUESTS) {
     requests.shift()
   }
 }
 
-/**
- * Clear data for a tab (called on navigation to different domain)
- */
 export function clearTabData(tabId: number): void {
   consoleMessagesStore.delete(tabId)
   networkRequestsStore.delete(tabId)
 }
 
-/**
- * read_console_messages - Read browser console messages
- */
 async function readConsoleMessages(params: {
   tabId: number
   pattern?: string
@@ -91,7 +111,6 @@ async function readConsoleMessages(params: {
 
   if (!tabId) throw new Error('tabId is required')
 
-  // Try to get messages from content script
   try {
     const response = await sendToContentScript<{ messages?: ConsoleMessage[] }>(tabId, {
       type: MessageTypes.GET_CONSOLE_MESSAGES
@@ -103,33 +122,27 @@ async function readConsoleMessages(params: {
       }
     }
   } catch {
-    // Content script may not be ready, continue with stored messages
+    // Continue with stored messages
   }
 
   let messages = consoleMessagesStore.get(tabId) || []
 
-  // Filter by errors only
   if (onlyErrors) {
     messages = messages.filter(m => m.type === 'error' || m.type === 'exception')
   }
 
-  // Filter by pattern
   if (pattern) {
     const regex = new RegExp(pattern, 'i')
     messages = messages.filter(m => regex.test(m.text || ''))
   }
 
-  // Apply limit
   messages = messages.slice(-limit)
 
-  // Clear if requested
   if (clear) {
     consoleMessagesStore.delete(tabId)
     try {
       await sendToContentScript(tabId, { type: MessageTypes.CLEAR_CONSOLE_MESSAGES })
-    } catch {
-      // Ignore
-    }
+    } catch { /* Ignore */ }
   }
 
   return {
@@ -143,9 +156,6 @@ async function readConsoleMessages(params: {
   }
 }
 
-/**
- * read_network_requests - Read HTTP network requests
- */
 async function readNetworkRequests(params: {
   tabId: number
   pattern?: string
@@ -158,15 +168,12 @@ async function readNetworkRequests(params: {
 
   let requests = networkRequestsStore.get(tabId) || []
 
-  // Filter by URL pattern
   if (pattern) {
     requests = requests.filter(r => r.url?.includes(pattern))
   }
 
-  // Apply limit
   requests = requests.slice(-limit)
 
-  // Clear if requested
   if (clear) {
     networkRequestsStore.delete(tabId)
   }
@@ -184,9 +191,6 @@ async function readNetworkRequests(params: {
   }
 }
 
-/**
- * javascript_tool - Execute JavaScript in page context
- */
 async function javascriptTool(params: {
   code: string
   tabId: number
@@ -201,7 +205,6 @@ async function javascriptTool(params: {
       target: { tabId },
       func: (jsCode: string) => {
         try {
-          // Use indirect eval to execute in global scope
           const result = (0, eval)(jsCode)
           return { success: true, result }
         } catch (err) {
@@ -227,9 +230,6 @@ async function javascriptTool(params: {
   }
 }
 
-/**
- * Register debugging tools
- */
 export function registerDebuggingTools(): void {
   registerTool('read_console_messages', readConsoleMessages as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('read_network_requests', readNetworkRequests as (params: Record<string, unknown>) => Promise<unknown>)

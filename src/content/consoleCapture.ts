@@ -1,20 +1,10 @@
-/**
- * Console Capture
- * Intercepts console messages for debugging tools
- */
-
 import { MAX_CONSOLE_MESSAGES } from '@shared/constants'
 import type { ConsoleMessage } from '@shared/types'
 
-// Buffer for captured messages
 const consoleMessages: ConsoleMessage[] = []
 
-// Track if capture is set up
 let captureInitialized = false
 
-/**
- * Capture a console message
- */
 function captureMessage(type: ConsoleMessage['type'], args: unknown[]): void {
   const message: ConsoleMessage = {
     type,
@@ -33,18 +23,12 @@ function captureMessage(type: ConsoleMessage['type'], args: unknown[]): void {
     consoleMessages.shift()
   }
 
-  // Send to background script
   chrome.runtime.sendMessage({
     type: 'CONSOLE_MESSAGE',
     data: message
-  }).catch(() => {
-    // Ignore errors if background isn't ready
-  })
+  }).catch(() => {})
 }
 
-/**
- * Set up console capture by wrapping console methods
- */
 export function setupConsoleCapture(): void {
   if (captureInitialized) return
   captureInitialized = true
@@ -82,7 +66,6 @@ export function setupConsoleCapture(): void {
     originalConsole.debug.apply(console, args)
   }
 
-  // Capture uncaught errors
   window.addEventListener('error', (event) => {
     captureMessage('exception', [event.message, 'at', event.filename, ':', event.lineno])
   })
@@ -92,16 +75,10 @@ export function setupConsoleCapture(): void {
   })
 }
 
-/**
- * Get captured console messages
- */
 export function getConsoleMessages(): ConsoleMessage[] {
   return [...consoleMessages]
 }
 
-/**
- * Clear captured console messages
- */
 export function clearConsoleMessages(): void {
   consoleMessages.length = 0
 }

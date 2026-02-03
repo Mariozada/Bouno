@@ -1,9 +1,3 @@
-/**
- * BrowseRun Background Service Worker
- *
- * Entry point that initializes tools and sets up message handlers.
- */
-
 import {
   executeTool,
   getRegisteredTools,
@@ -13,33 +7,27 @@ import {
   registerDebuggingTools,
   registerMediaTools,
   registerUiTools,
-  registerShortcutsTools,
   addConsoleMessage,
   addNetworkRequest,
-  clearTabData,
-  detachCDP
+  clearTabData
 } from '@tools/index'
 import { MessageTypes } from '@shared/messages'
 
-// Register all tools
 registerTabTools()
 registerPageReadingTools()
 registerInteractionTools()
 registerDebuggingTools()
 registerMediaTools()
 registerUiTools()
-registerShortcutsTools()
 
 console.log('BrowseRun: Registered tools:', getRegisteredTools())
 
-// Side panel handling
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId })
 })
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
 
-// Extension lifecycle
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('BrowseRun: Extension installed')
@@ -48,11 +36,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 })
 
-// Handle messages from content scripts and side panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type } = message as { type: string }
 
-  // Console message from content script
   if (type === MessageTypes.CONSOLE_MESSAGE) {
     const tabId = sender.tab?.id
     if (tabId) {
@@ -61,7 +47,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return
   }
 
-  // Tab info request from side panel
   if (type === MessageTypes.GET_TAB_INFO) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
@@ -75,7 +60,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
-  // Forward script execution to content script
   if (type === MessageTypes.EXECUTE_SCRIPT) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
@@ -85,17 +69,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
-  // Tool execution request from side panel
   if (type === MessageTypes.EXECUTE_TOOL) {
     const { tool, params } = message as { tool: string; params: Record<string, unknown> }
-    executeTool(tool, params).then(sendResponse)
+    console.log(`[BrowseRun:background] EXECUTE_TOOL received: tool=${tool}, params=`, params)
+    console.log(`[BrowseRun:background] Sender:`, sender.tab?.id, sender.url)
+
+    executeTool(tool, params).then((result) => {
+      console.log(`[BrowseRun:background] EXECUTE_TOOL result:`, result)
+      sendResponse(result)
+    }).catch((err) => {
+      console.log(`[BrowseRun:background] EXECUTE_TOOL error:`, err)
+      sendResponse({ success: false, error: err.message })
+    })
     return true
   }
 
   return false
 })
 
-// Monitor network requests
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.tabId > 0) {
@@ -113,10 +104,8 @@ chrome.webRequest.onCompleted.addListener(
   ['responseHeaders']
 )
 
-// Track tab navigation for clearing data
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'loading' && changeInfo.url) {
-    // Check if navigating to different domain - clear stored data
     const currentDomain = tab.url ? new URL(tab.url).hostname : ''
     const newDomain = changeInfo.url ? new URL(changeInfo.url).hostname : ''
 
@@ -130,11 +119,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 })
 
-// Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearTabData(tabId)
-  // Detach CDP session if attached
-  detachCDP(tabId).catch(() => {
-    // Ignore errors if not attached
-  })
 })
