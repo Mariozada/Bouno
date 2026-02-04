@@ -11,11 +11,24 @@ export interface OpenAICompatibleConfig {
   name: string
 }
 
+export interface TracingSettings {
+  enabled: boolean
+  endpoint: string
+  projectName: string
+}
+
 export interface ProviderSettings {
   provider: ProviderType
   model: string
   apiKeys: Partial<Record<ProviderType, string>>
   openaiCompatible?: OpenAICompatibleConfig
+  tracing?: TracingSettings
+}
+
+export const DEFAULT_TRACING_SETTINGS: TracingSettings = {
+  enabled: false,
+  endpoint: 'http://0.0.0.0:6006',
+  projectName: 'browserun',
 }
 
 export const DEFAULT_SETTINGS: ProviderSettings = {
@@ -26,6 +39,7 @@ export const DEFAULT_SETTINGS: ProviderSettings = {
     baseURL: 'http://localhost:11434/v1',
     name: 'ollama',
   },
+  tracing: DEFAULT_TRACING_SETTINGS,
 }
 
 export const STORAGE_KEY = 'browserun_agent_settings'

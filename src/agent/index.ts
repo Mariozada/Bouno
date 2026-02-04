@@ -10,5 +10,15 @@ export type { ParsedToolCall, ParseResult } from './xmlParser'
 export { XMLStreamParser, STREAM_EVENT_TYPES, parsePartialJSON } from './streamParser'
 export type { StreamEvent, ToolCallEvent, ToolResultEvent } from './streamParser'
 
-export { runStreamingAgentLoop } from './streamLoop'
-export type { StreamAgentOptions, StreamAgentResult, ToolCallInfo } from './streamLoop'
+export { runWorkflow } from './workflow'
+export type {
+  AgentOptions,
+  AgentResult,
+  AgentCallbacks,
+  ToolCallInfo,
+  Message,
+  FinishReason,
+} from './workflow'
+
+export { getTracer } from './tracing'
+export type { TracingConfig } from './tracing'
