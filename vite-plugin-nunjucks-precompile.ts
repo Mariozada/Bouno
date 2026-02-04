@@ -25,28 +25,25 @@ export function nunjucksPrecompile(): Plugin {
       // Get template name from path
       const templateName = id.split('/').pop() || 'template'
 
-      // Precompile the template
+      // Precompile the template - this outputs code that registers to window.nunjucksPrecompiled
       const precompiled = nunjucks.precompileString(code, {
         name: templateName,
-        asFunction: false,
       })
 
-      // Return a module that exports a render function
-      // Configure environment to be lenient with missing/extra variables
+      // Import nunjucks-slim and register the precompiled template
+      // nunjucks-slim automatically uses window.nunjucksPrecompiled
       return {
         code: `
           import nunjucks from 'nunjucks/browser/nunjucks-slim.js';
 
-          // Configure lenient environment:
-          // - throwOnUndefined: false = missing variables render as empty
-          // - Extra variables passed but not used are automatically ignored
-          const env = new nunjucks.Environment(null, {
-            throwOnUndefined: false,
-            autoescape: false
-          });
+          // Initialize precompiled templates storage on window
+          window.nunjucksPrecompiled = window.nunjucksPrecompiled || {};
 
-          // Register the precompiled template
+          // Register the precompiled template (this adds to window.nunjucksPrecompiled)
           ${precompiled}
+
+          // Configure nunjucks to not throw on undefined variables
+          nunjucks.configure({ throwOnUndefined: false, autoescape: false });
 
           /**
            * Render template with flexible variable handling
@@ -54,7 +51,7 @@ export function nunjucksPrecompile(): Plugin {
            * - Missing variables in template: render as empty string
            */
           export function render(context = {}) {
-            return env.render('${templateName}', context);
+            return nunjucks.render('${templateName}', context);
           }
 
           export default render;

@@ -1,5 +1,5 @@
 import { useState, Component, type FC, type ReactNode } from 'react'
-import type { ToolCallInfo } from '@agent/loop'
+import type { ToolCallInfo } from '@agent/index'
 
 export type { ToolCallInfo }
 
@@ -7,7 +7,6 @@ interface ToolCallDisplayProps {
   toolCall: ToolCallInfo
 }
 
-// Error boundary to catch rendering errors
 interface ErrorBoundaryProps {
   children: ReactNode
   fallback: ReactNode
@@ -40,18 +39,19 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 const STATUS_ICONS: Record<ToolCallInfo['status'], string> = {
+  pending: '○',
   running: '◐',
   completed: '●',
   error: '✕',
 }
 
 const STATUS_LABELS: Record<ToolCallInfo['status'], string> = {
+  pending: 'Pending',
   running: 'Running',
   completed: 'Done',
   error: 'Error',
 }
 
-// Format tool names for display
 function formatToolName(name: string): string {
   if (!name) return 'Unknown Tool'
   return name
@@ -59,7 +59,6 @@ function formatToolName(name: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-// Safely stringify a value
 function safeStringify(value: unknown, maxLen = 100): string {
   try {
     if (value === null) return 'null'
@@ -74,7 +73,6 @@ function safeStringify(value: unknown, maxLen = 100): string {
   }
 }
 
-// Summarize input parameters
 function summarizeInput(input: unknown): string {
   if (!input || typeof input !== 'object') return 'No parameters'
 
@@ -99,7 +97,6 @@ function summarizeInput(input: unknown): string {
   }
 }
 
-// Safe JSON stringify for display
 function formatJson(value: unknown): string {
   try {
     if (typeof value === 'string') return value
@@ -109,7 +106,6 @@ function formatJson(value: unknown): string {
   }
 }
 
-// Format result for inline display (truncated)
 function formatResultPreview(result: unknown, maxLines = 5): string {
   const json = formatJson(result)
   const lines = json.split('\n')
@@ -129,21 +125,18 @@ const ToolCallContent: FC<ToolCallDisplayProps> = ({ toolCall }) => {
 
   return (
     <div className={`tool-call tool-call--${toolCall.status}`}>
-      {/* Header - always visible */}
       <div className="tool-call-header">
         <span className="tool-call-icon" aria-hidden="true">{statusIcon}</span>
         <span className="tool-call-name">{formatToolName(toolCall.name)}</span>
         <span className="tool-call-status">{statusLabel}</span>
       </div>
 
-      {/* Input summary - show while running */}
       {toolCall.status === 'running' && (
         <div className="tool-call-input-summary">
           {summarizeInput(toolCall.input)}
         </div>
       )}
 
-      {/* Output section - show when finished */}
       {isFinished && (
         <div className="tool-call-output">
           {toolCall.error ? (

@@ -1,5 +1,3 @@
-/** Debugging Tools: read_console_messages, read_network_requests, javascript_tool */
-
 import { registerTool } from '../registry'
 import { MessageTypes } from '@shared/messages'
 import type { ConsoleMessage, NetworkRequest } from '@shared/types'
@@ -121,9 +119,7 @@ async function readConsoleMessages(params: {
         addConsoleMessage(tabId, msg)
       }
     }
-  } catch {
-    // Continue with stored messages
-  }
+  } catch {}
 
   let messages = consoleMessagesStore.get(tabId) || []
 
@@ -142,7 +138,7 @@ async function readConsoleMessages(params: {
     consoleMessagesStore.delete(tabId)
     try {
       await sendToContentScript(tabId, { type: MessageTypes.CLEAR_CONSOLE_MESSAGES })
-    } catch { /* Ignore */ }
+    } catch {}
   }
 
   return {
@@ -212,7 +208,7 @@ async function javascriptTool(params: {
         }
       },
       args: [code],
-      world: 'MAIN' // Execute in page context
+      world: 'MAIN'
     })
 
     if (results?.[0]) {

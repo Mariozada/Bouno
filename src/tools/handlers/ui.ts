@@ -1,5 +1,3 @@
-/** UI Signaling Tools: update_plan */
-
 import { registerTool } from '../registry'
 
 let currentPlan: {

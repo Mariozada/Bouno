@@ -1,5 +1,3 @@
-/** Media Tools: gif_creator */
-
 import { registerTool } from '../registry'
 import type { GifRecordingState, GifFrame } from '@shared/types'
 import { MAX_GIF_FRAMES } from '@shared/constants'
