@@ -8,17 +8,14 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-interface ApiMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
 import { useSettings } from '../hooks/useSettings'
 import {
   createProvider,
   validateSettings,
   PROVIDER_CONFIGS,
-  runStreamingAgentLoop,
-  type ToolCallInfo
+  runWorkflow,
+  type ToolCallInfo,
+  type Message as AgentMessage,
 } from '@agent/index'
 import { SettingsPanel } from './SettingsPanel'
 import { ToolCallDisplay } from './ToolCallDisplay'
@@ -96,7 +93,7 @@ export const AgentChat: FC = () => {
         log('Creating provider:', settings.provider, settings.model)
         const model = createProvider(settings)
 
-        const apiMessages: ApiMessage[] = [
+        const agentMessages: AgentMessage[] = [
           ...messages
             .filter((m) => m.content && m.content.trim().length > 0 && !m.content.includes('(No response'))
             .map((m) => ({
@@ -109,45 +106,42 @@ export const AgentChat: FC = () => {
         let accumulatedText = ''
         const accumulatedToolCalls: ToolCallInfo[] = []
 
-        const result = await runStreamingAgentLoop({
+        const updateAssistantMessage = () => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: accumulatedText, toolCalls: [...accumulatedToolCalls] }
+                : m
+            )
+          )
+        }
+
+        const result = await runWorkflow({
           model,
-          messages: apiMessages,
+          messages: agentMessages,
           tabId,
           maxSteps: MAX_STEPS,
           abortSignal: abortControllerRef.current?.signal,
-          onTextDelta: (delta) => {
-            accumulatedText += delta
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: accumulatedText, toolCalls: [...accumulatedToolCalls] }
-                  : m
-              )
-            )
+          callbacks: {
+            onTextDelta: (delta) => {
+              accumulatedText += delta
+              updateAssistantMessage()
+            },
+            onToolStart: (toolCall) => {
+              accumulatedToolCalls.push(toolCall)
+              updateAssistantMessage()
+            },
+            onToolDone: (toolCall) => {
+              const index = accumulatedToolCalls.findIndex(tc => tc.id === toolCall.id)
+              if (index !== -1) {
+                accumulatedToolCalls[index] = toolCall
+              }
+              updateAssistantMessage()
+            },
           },
-          onToolCallStart: (toolCall) => {
-            accumulatedToolCalls.push(toolCall)
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: accumulatedText, toolCalls: [...accumulatedToolCalls] }
-                  : m
-              )
-            )
-          },
-          onToolCallDone: (toolCall) => {
-            const index = accumulatedToolCalls.findIndex(tc => tc.id === toolCall.id)
-            if (index !== -1) {
-              accumulatedToolCalls[index] = toolCall
-            }
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: accumulatedText, toolCalls: [...accumulatedToolCalls] }
-                  : m
-              )
-            )
-          }
+          tracing: settings.tracing,
+          modelName: settings.model,
+          provider: settings.provider,
         })
 
         log('Agent loop complete:', {
@@ -273,7 +267,7 @@ export const AgentChat: FC = () => {
               title="Clear chat"
               aria-label="Clear chat"
             >
-              Clear
+              [x]
             </button>
           )}
           <button
@@ -283,7 +277,7 @@ export const AgentChat: FC = () => {
             title="Settings"
             aria-label="Open settings"
           >
-            Settings
+            [=]
           </button>
         </div>
       </div>
@@ -305,8 +299,7 @@ export const AgentChat: FC = () => {
         {messages.length === 0 ? (
           <div className="message-list-empty">
             <div className="empty-state">
-              <div className="empty-avatar">A</div>
-              <p className="empty-title">How can I help you today?</p>
+              <p>Browser Automation Agent</p>
               <p className="help-text">
                 Ask me to interact with the current page - click buttons, fill forms, navigate, and more.
               </p>
@@ -317,25 +310,23 @@ export const AgentChat: FC = () => {
             const hasContent = message.content && message.content.trim().length > 0
             const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
             const isEmptyAssistant = message.role === 'assistant' && !hasContent && !hasToolCalls
-            const isStreamingMessage = isStreaming && message.id === messages[messages.length - 1]?.id
-
-            if (message.role === 'user') {
-              return (
-                <div key={message.id} className="message-row message-user">
-                  <div className="message-bubble message-user-bubble">
-                    <div className="message-text">{message.content}</div>
-                  </div>
-                </div>
-              )
-            }
 
             return (
-              <div key={message.id} className="message-row message-assistant">
-                <div className="message-avatar">A</div>
-                <div className="message-body">
-                  {hasContent && (
-                    <MarkdownMessage content={message.content} isStreaming={isStreamingMessage} />
-                  )}
+              <div
+                key={message.id}
+                className={`message ${message.role === 'user' ? 'message-user' : 'message-assistant'}`}
+              >
+                <div className="message-header">
+                  <span className="message-role">
+                    {message.role === 'user' ? 'You' : 'Agent'}
+                  </span>
+                </div>
+                <div className="message-content">
+                  {hasContent && (message.role === 'assistant' ? (
+                    <MarkdownMessage content={message.content} />
+                  ) : (
+                    <div className="message-text">{message.content}</div>
+                  ))}
                   {hasToolCalls && (
                     <div className="message-tool-calls">
                       {message.toolCalls!.map((tc) => (
@@ -357,6 +348,19 @@ export const AgentChat: FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {isStreaming && (
+        <div className="streaming-controls">
+          <button
+            type="button"
+            className="stop-button"
+            onClick={handleStop}
+            aria-label="Stop generation"
+          >
+            Stop
+          </button>
+        </div>
+      )}
+
       <form className="chat-input-form" onSubmit={handleSubmit}>
         <textarea
           className="chat-input"
@@ -371,29 +375,15 @@ export const AgentChat: FC = () => {
           disabled={isStreaming || !!validationError}
           rows={2}
         />
-        {isStreaming ? (
-          <button
-            type="button"
-            className="send-button stop-button"
-            onClick={handleStop}
-            aria-label="Stop generation"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="send-button"
-            disabled={!canSend}
-            aria-label="Send message"
-          >
-            Send
-          </button>
-        )}
+        <button
+          type="submit"
+          className="send-button"
+          disabled={!canSend}
+          aria-label="Send message"
+        >
+          {isStreaming ? '...' : '>'}
+        </button>
       </form>
-      <div className="composer-footer">
-        Agent outputs may be inaccurate. Verify critical details.
-      </div>
 
       {showSettings && (
         <div className="settings-overlay">

@@ -1,7 +1,6 @@
 import type { FC } from 'react'
 import { AgentChat } from './components'
 import './styles/App.css'
-import './styles/markdown.css'
 
 const App: FC = () => {
   return (
