@@ -1,5 +1,3 @@
-/** Element Interaction Tools: form_input, computer, upload_image */
-
 import { registerTool } from '../registry'
 import { MessageTypes } from '@shared/messages'
 import type { Screenshot } from '@shared/types'

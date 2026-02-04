@@ -23,24 +23,18 @@ registerUiTools()
 
 console.log('BrowseRun: Registered tools:', getRegisteredTools())
 
-// Disable the default global panel behavior
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false })
-
-// Disable panel globally by default
 chrome.sidePanel.setOptions({ enabled: false })
 
-// Open panel for specific tab when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   if (!tab.id) return
 
   const tabId = tab.id
   console.log('BrowseRun: Opening side panel for tab', tabId)
 
-  // Check if tab is already in a managed group
   const existingGroup = tabGroups.findGroupByTab(tabId)
 
   if (existingGroup) {
-    // Tab is already in a BrowseRun group, just open the panel
     console.log('BrowseRun: Tab', tabId, 'already in managed group', existingGroup.groupId, '- opening panel only')
 
     chrome.sidePanel.setOptions({
@@ -53,7 +47,6 @@ chrome.action.onClicked.addListener((tab) => {
     return
   }
 
-  // Configure and open panel FIRST (synchronously for user gesture)
   chrome.sidePanel.setOptions({
     tabId,
     path: `sidepanel.html?tabId=${tabId}`,
@@ -61,46 +54,37 @@ chrome.action.onClicked.addListener((tab) => {
   })
 
   chrome.sidePanel.open({ tabId })
-
-  // Now handle group logic asynchronously
   handleTabGrouping(tabId)
 })
 
-// Async function to handle tab grouping after panel is opened
 async function handleTabGrouping(tabId: number): Promise<void> {
   try {
-    // Check if tab is in an existing Chrome tab group
     const currentTab = await chrome.tabs.get(tabId)
     const isInChromeGroup = currentTab.groupId !== undefined &&
                             currentTab.groupId !== -1 &&
                             currentTab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE
 
     if (isInChromeGroup) {
-      // Tab is in an existing Chrome group - adopt it instead of creating new
       console.log('BrowseRun: Tab', tabId, 'is in existing Chrome group', currentTab.groupId, '- adopting group')
 
       const adoptedGroup = await tabGroups.checkAndAdoptGroup(tabId)
 
       if (adoptedGroup) {
-        // Update panel path with group ID
         await chrome.sidePanel.setOptions({
           tabId,
           path: `sidepanel.html?tabId=${tabId}&groupId=${adoptedGroup.groupId}`,
           enabled: true
         })
 
-        // Enable panel for all tabs in the adopted group
         await tabGroups.enablePanelForGroup(adoptedGroup.groupId)
         return
       }
     }
 
-    // Tab is not in any group, create a new one
     console.log('BrowseRun: Tab', tabId, 'not in any group - creating new group')
 
     await tabGroups.createGroup(tabId)
 
-    // Disable panel for all tabs not in the group
     const allTabs = await chrome.tabs.query({})
     for (const t of allTabs) {
       if (t.id && !tabGroups.isTabManaged(t.id)) {
@@ -115,11 +99,9 @@ async function handleTabGrouping(tabId: number): Promise<void> {
   }
 }
 
-// When a new tab is created, check if it should join an existing group
 chrome.tabs.onCreated.addListener(async (tab) => {
   if (!tab.id) return
 
-  // Check if opener tab is in a managed group
   if (tab.openerTabId) {
     const group = tabGroups.findGroupByTab(tab.openerTabId)
     if (group) {
@@ -129,25 +111,19 @@ chrome.tabs.onCreated.addListener(async (tab) => {
     }
   }
 
-  // Not from a grouped tab - disable panel for this new tab
   chrome.sidePanel.setOptions({
     tabId: tab.id,
     enabled: false
   }).catch(() => {})
 })
 
-// Listen for tabs being added to Chrome tab groups
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
-  // Check if tab's group changed
   if (changeInfo.groupId !== undefined) {
     if (changeInfo.groupId === -1 || changeInfo.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
-      // Tab was removed from group
       tabGroups.removeTab(tabId)
     } else {
-      // Tab was added to a group - check if we manage it
       const existingGroup = tabGroups.findGroupByTab(tabId)
       if (!existingGroup) {
-        // Check if this is one of our groups
         const adopted = await tabGroups.checkAndAdoptGroup(tabId)
         if (adopted) {
           await tabGroups.enablePanelForGroup(adopted.groupId)
@@ -157,7 +133,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
   }
 })
 
-// Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabGroups.removeTab(tabId)
   clearTabData(tabId)

@@ -1,12 +1,3 @@
-/**
- * Tool Definition Types
- *
- * These types define the structure of tool metadata used for:
- * 1. Generating prompts via Jinja templates
- * 2. Creating AI SDK tool wrappers
- * 3. Enabling/disabling tools dynamically
- */
-
 export type ToolParameterType = 'string' | 'number' | 'boolean' | 'array' | 'object'
 
 export type ToolCategory = 'reading' | 'interaction' | 'navigation' | 'debugging' | 'media' | 'ui'

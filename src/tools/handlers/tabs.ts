@@ -1,5 +1,3 @@
-/** Tab Management Tools: tabs_context, tabs_create, navigate, resize_window, web_fetch */
-
 import { registerTool } from '../registry'
 import type { TabInfo } from '@shared/types'
 

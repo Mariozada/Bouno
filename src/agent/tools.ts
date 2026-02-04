@@ -1,33 +1,16 @@
-/**
- * Agent Tools
- *
- * Browser automation tools for AI SDK.
- * These tools execute via chrome.runtime.sendMessage to the background script.
- */
-
 import { tool } from 'ai'
 import { z } from 'zod'
 
-// Current tab ID for tool execution
 let currentTabId = 0
 
-/**
- * Set the current tab ID for tool execution
- */
 export function setCurrentTabId(tabId: number): void {
   currentTabId = tabId
 }
 
-/**
- * Get the current tab ID
- */
 export function getCurrentTabId(): number {
   return currentTabId
 }
 
-/**
- * Execute a tool via chrome runtime message to the background script
- */
 async function executeViaChromeMessage(
   toolName: string,
   params: Record<string, unknown>
@@ -56,11 +39,7 @@ async function executeViaChromeMessage(
   }
 }
 
-/**
- * All browser automation tools
- */
 const browserToolsDefinition = {
-  // Page Reading Tools
   read_page: tool({
     description: 'Get the accessibility tree of the current page. Use this to understand the page structure and find element refs for interaction.',
     inputSchema: z.object({
@@ -85,7 +64,6 @@ const browserToolsDefinition = {
     execute: async (params): Promise<Record<string, unknown>> => executeViaChromeMessage('find', params),
   }),
 
-  // Interaction Tools
   computer: tool({
     description: 'Perform mouse and keyboard actions on the page. Use refs from read_page to target elements.',
     inputSchema: z.object({
@@ -128,7 +106,6 @@ const browserToolsDefinition = {
     execute: async (params): Promise<Record<string, unknown>> => executeViaChromeMessage('upload_image', params),
   }),
 
-  // Navigation Tools
   navigate: tool({
     description: 'Navigate to a URL or go back/forward in history.',
     inputSchema: z.object({
@@ -168,7 +145,6 @@ const browserToolsDefinition = {
     execute: async (params): Promise<Record<string, unknown>> => executeViaChromeMessage('web_fetch', params),
   }),
 
-  // Debugging Tools
   read_console_messages: tool({
     description: 'Read browser console messages (logs, errors, warnings).',
     inputSchema: z.object({
@@ -198,7 +174,6 @@ const browserToolsDefinition = {
     execute: async (params): Promise<Record<string, unknown>> => executeViaChromeMessage('javascript_tool', params),
   }),
 
-  // Media Tools
   gif_creator: tool({
     description: 'Record and export GIF animations of browser actions.',
     inputSchema: z.object({
@@ -210,7 +185,6 @@ const browserToolsDefinition = {
     execute: async (params): Promise<Record<string, unknown>> => executeViaChromeMessage('gif_creator', params),
   }),
 
-  // UI Tools
   update_plan: tool({
     description: 'Present a plan to the user for approval before proceeding.',
     inputSchema: z.object({
@@ -221,16 +195,10 @@ const browserToolsDefinition = {
   }),
 }
 
-/**
- * Get all browser tools
- */
 export function getBrowserTools(): typeof browserToolsDefinition {
   return browserToolsDefinition
 }
 
-/**
- * Get a specific tool by name
- */
 export function getTool<K extends keyof typeof browserToolsDefinition>(
   name: K
 ): typeof browserToolsDefinition[K] {

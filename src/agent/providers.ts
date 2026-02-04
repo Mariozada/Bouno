@@ -11,7 +11,6 @@ const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[Agent:Provider]', ...args)
 const logError = (...args: unknown[]) => console.error('[Agent:Provider]', ...args)
 
-// Custom fetch wrapper with detailed logging
 const createFetchWithLogging = (providerName: string) => {
   return async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString()

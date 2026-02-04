@@ -17,7 +17,6 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Check if current model is in the predefined list
   const models = getModelsForProvider(localSettings.provider)
   const isModelInList = models.some((m) => m.id === localSettings.model)
   const [useCustomModel, setUseCustomModel] = useState(
@@ -54,7 +53,6 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
     const checked = e.target.checked
     setUseCustomModel(checked)
     if (!checked) {
-      // Reset to default model when switching back to dropdown
       const defaultModel = getDefaultModelForProvider(localSettings.provider)
       setLocalSettings((prev) => ({
         ...prev,

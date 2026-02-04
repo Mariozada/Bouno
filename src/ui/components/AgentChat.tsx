@@ -8,7 +8,6 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-// Message type for the API
 interface ApiMessage {
   role: 'user' | 'assistant'
   content: string
@@ -18,7 +17,7 @@ import {
   createProvider,
   validateSettings,
   PROVIDER_CONFIGS,
-  runAgentLoop,
+  runStreamingAgentLoop,
   type ToolCallInfo
 } from '@agent/index'
 import { SettingsPanel } from './SettingsPanel'
@@ -74,7 +73,6 @@ export const AgentChat: FC = () => {
       setInputValue('')
       setError(null)
 
-      // Add user message
       const userMessage: Message = {
         id: Date.now().toString(),
         role: 'user',
@@ -82,7 +80,6 @@ export const AgentChat: FC = () => {
       }
       setMessages((prev) => [...prev, userMessage])
 
-      // Create assistant message placeholder
       const assistantMessageId = (Date.now() + 1).toString()
       setMessages((prev) => [...prev, {
         id: assistantMessageId,
@@ -98,7 +95,6 @@ export const AgentChat: FC = () => {
         log('Creating provider:', settings.provider, settings.model)
         const model = createProvider(settings)
 
-        // Build initial messages for API
         const apiMessages: ApiMessage[] = [
           ...messages
             .filter((m) => m.content && m.content.trim().length > 0 && !m.content.includes('(No response'))
@@ -109,19 +105,17 @@ export const AgentChat: FC = () => {
           { role: 'user' as const, content: text },
         ]
 
-        // Track accumulated state for UI updates
         let accumulatedText = ''
         const accumulatedToolCalls: ToolCallInfo[] = []
 
-        // Run the agent loop
-        const result = await runAgentLoop({
+        const result = await runStreamingAgentLoop({
           model,
           messages: apiMessages,
           tabId,
           maxSteps: MAX_STEPS,
           abortSignal: abortControllerRef.current?.signal,
-          onText: (text) => {
-            accumulatedText += text
+          onTextDelta: (delta) => {
+            accumulatedText += delta
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantMessageId
@@ -130,7 +124,7 @@ export const AgentChat: FC = () => {
               )
             )
           },
-          onToolCall: (toolCall) => {
+          onToolCallStart: (toolCall) => {
             accumulatedToolCalls.push(toolCall)
             setMessages((prev) =>
               prev.map((m) =>
@@ -140,7 +134,7 @@ export const AgentChat: FC = () => {
               )
             )
           },
-          onToolResult: (toolCall) => {
+          onToolCallDone: (toolCall) => {
             const index = accumulatedToolCalls.findIndex(tc => tc.id === toolCall.id)
             if (index !== -1) {
               accumulatedToolCalls[index] = toolCall
@@ -162,7 +156,6 @@ export const AgentChat: FC = () => {
           toolCalls: result.toolCalls.length
         })
 
-        // Final update
         if (result.text || result.toolCalls.length > 0) {
           setMessages((prev) =>
             prev.map((m) =>
@@ -189,7 +182,6 @@ export const AgentChat: FC = () => {
           setError(errorMessage)
         }
 
-        // Keep partial results if any
         setMessages((prev) => {
           const assistantMsg = prev.find((m) => m.id === assistantMessageId)
           const hasContent = assistantMsg?.content && assistantMsg.content.trim().length > 0
