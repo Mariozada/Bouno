@@ -1,6 +1,7 @@
 import { type FC, useMemo, useState, type ComponentPropsWithoutRef, type ComponentType } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Check, Copy } from 'lucide-react'
 import { memoizeMarkdownComponents } from '../markdown/memoization'
 import { PreOverride, useIsMarkdownCodeBlock } from '../markdown/PreOverride'
 import { CodeOverride } from '../markdown/CodeOverride'
@@ -11,6 +12,8 @@ import {
   DefaultPre
 } from '../markdown/defaultComponents'
 import type { CodeHeaderProps, SyntaxHighlighterProps } from '../markdown/types'
+import { SyntaxHighlighter } from '../markdown/syntaxHighlighter'
+import { TooltipIconButton } from './TooltipIconButton'
 
 interface MarkdownMessageProps {
   content: string
@@ -50,17 +53,17 @@ const useCopyToClipboard = (copiedDuration = 2000) => {
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard()
 
+  const onCopy = () => {
+    if (!code || isCopied) return
+    copyToClipboard(code)
+  }
+
   return (
     <div className="aui-code-header-root">
       <span className="aui-code-header-language">{language}</span>
-      <button
-        type="button"
-        className="aui-code-header-copy"
-        onClick={() => copyToClipboard(code)}
-        aria-label="Copy code"
-      >
-        {isCopied ? 'Copied' : 'Copy'}
-      </button>
+      <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+        {isCopied ? <Check size={14} /> : <Copy size={14} />}
+      </TooltipIconButton>
     </div>
   )
 }
@@ -134,7 +137,7 @@ const defaultComponents = memoizeMarkdownComponents({
       />
     )
   },
-  SyntaxHighlighter: DefaultCodeBlockContent as ComponentType<
+  SyntaxHighlighter: SyntaxHighlighter as ComponentType<
     Omit<SyntaxHighlighterProps, 'node'>
   >,
   CodeHeader: CodeHeader as ComponentType<Omit<CodeHeaderProps, 'node'>>,
