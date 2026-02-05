@@ -25,7 +25,7 @@ const CodeBlockOverride = ({
   const getCodeProps = withDefaultProps<any>(codeProps)
   const WrappedCode: CodeComponent = (props) => <Code {...getCodeProps(props)} />
 
-  const language = /language-([\\w-]+)/.exec(codeProps.className || '')?.[1] ?? ''
+  const language = /language-([\w-]+)/.exec(codeProps.className || '')?.[1] ?? ''
 
   const normalized =
     typeof children === 'string'

@@ -8,6 +8,9 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
+import { LazyMotion, domAnimation, MotionConfig } from 'motion/react'
+import * as m from 'motion/react-m'
+import { ArrowUp, Check, Copy, RefreshCw, Square } from 'lucide-react'
 import { useSettings } from '../hooks/useSettings'
 import {
   createProvider,
@@ -20,6 +23,7 @@ import {
 import { SettingsPanel } from './SettingsPanel'
 import { ToolCallDisplay } from './ToolCallDisplay'
 import { MarkdownMessage } from './MarkdownMessage'
+import { TooltipIconButton } from './TooltipIconButton'
 
 const DEBUG = true
 const MAX_STEPS = 15
@@ -43,6 +47,10 @@ export const AgentChat: FC = () => {
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesRef = useRef<Message[]>([])
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
 
   const tabId = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -55,14 +63,26 @@ export const AgentChat: FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
   const validationError = validateSettings(settings)
 
-  const handleSubmit = useCallback(
-    async (e: FormEvent) => {
-      e.preventDefault()
-      log('=== Handle Submit ===')
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [])
 
-      const text = inputValue.trim()
+  useEffect(() => {
+    resizeTextarea()
+  }, [inputValue, resizeTextarea])
+
+  const sendMessage = useCallback(
+    async (text: string) => {
+      log('=== Send Message ===')
       if (!text || isStreaming || validationError) {
         logWarn('Cannot send:', { text: !!text, isStreaming, validationError })
         return
@@ -94,7 +114,7 @@ export const AgentChat: FC = () => {
         const model = createProvider(settings)
 
         const agentMessages: AgentMessage[] = [
-          ...messages
+          ...messagesRef.current
             .filter((m) => m.content && m.content.trim().length > 0 && !m.content.includes('(No response'))
             .map((m) => ({
               role: m.role as 'user' | 'assistant',
@@ -193,7 +213,17 @@ export const AgentChat: FC = () => {
         log('=== Agent loop finished ===')
       }
     },
-    [inputValue, isStreaming, validationError, settings, messages, tabId]
+    [isStreaming, validationError, settings, tabId]
+  )
+
+  const handleSubmit = useCallback(
+    (e: FormEvent) => {
+      e.preventDefault()
+      const text = inputValue.trim()
+      if (!text) return
+      sendMessage(text)
+    },
+    [inputValue, sendMessage]
   )
 
   const handleStop = useCallback(() => {
@@ -221,6 +251,23 @@ export const AgentChat: FC = () => {
     setMessages([])
     setError(null)
   }, [])
+
+  const handleSuggestion = useCallback((text: string) => {
+    sendMessage(text)
+  }, [sendMessage])
+
+  const handleCopyMessage = useCallback((messageId: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedMessageId(messageId)
+    setTimeout(() => setCopiedMessageId(null), 2000)
+  }, [])
+
+  const handleRetry = useCallback(() => {
+    const lastUser = [...messagesRef.current].reverse().find((m) => m.role === 'user')
+    if (lastUser?.content) {
+      sendMessage(lastUser.content)
+    }
+  }, [sendMessage])
 
   const handleOpenSettings = useCallback(() => {
     setShowSettings(true)
@@ -250,21 +297,45 @@ export const AgentChat: FC = () => {
   const currentProvider = PROVIDER_CONFIGS[settings.provider]
   const displayError = validationError || error
 
+  const suggestions = [
+    {
+      title: 'Summarize this page',
+      label: 'with key actions available',
+      action: 'Summarize this page and list key actions I can take.',
+    },
+    {
+      title: 'Fill a form',
+      label: 'with sample data',
+      action: 'Fill the main form on this page with realistic sample data.',
+    },
+    {
+      title: 'Find CTA buttons',
+      label: 'and describe them',
+      action: 'Find the primary call-to-action buttons and describe them.',
+    },
+    {
+      title: 'Extract key info',
+      label: 'from this page',
+      action: 'Extract key information and highlight important details.',
+    },
+  ]
+
   return (
-    <div className="agent-chat">
-      <div className="agent-header">
-        <div className="agent-info">
+    <LazyMotion features={domAnimation}>
+      <MotionConfig reducedMotion="user">
+        <div className="agent-chat aui-thread-root">
+          <div className="aui-topbar">
+        <div className="aui-topbar-info">
           <span className="provider-badge">{currentProvider.name}</span>
           <span className="model-name">{settings.model}</span>
           {tabId > 0 && <span className="tab-badge">Tab {tabId}</span>}
         </div>
-        <div className="agent-actions">
+        <div className="aui-topbar-actions">
           {messages.length > 0 && (
             <button
               type="button"
               className="button-icon"
               onClick={handleClear}
-              title="Clear chat"
               aria-label="Clear chat"
             >
               Clear
@@ -274,7 +345,6 @@ export const AgentChat: FC = () => {
             type="button"
             className="button-icon"
             onClick={handleOpenSettings}
-            title="Settings"
             aria-label="Open settings"
           >
             Settings
@@ -295,15 +365,45 @@ export const AgentChat: FC = () => {
         </div>
       )}
 
-      <div className="message-list">
+      <div className="aui-thread-viewport">
         {messages.length === 0 ? (
-          <div className="message-list-empty">
-            <div className="empty-state">
-              <div className="empty-avatar">A</div>
-              <p className="empty-title">How can I help you today?</p>
-              <p className="help-text">
-                Ask me to interact with the current page - click buttons, fill forms, navigate, and more.
-              </p>
+          <div className="aui-thread-welcome-root">
+            <div className="aui-thread-welcome-message">
+              <m.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="aui-thread-welcome-title"
+              >
+                Hello there!
+              </m.div>
+              <m.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="aui-thread-welcome-subtitle"
+              >
+                How can I help you today?
+              </m.div>
+            </div>
+            <div className="aui-thread-welcome-suggestions">
+              {suggestions.map((suggestion, index) => (
+                <m.button
+                  key={suggestion.action}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 * index }}
+                  type="button"
+                  className="aui-thread-welcome-suggestion"
+                  onClick={() => handleSuggestion(suggestion.action)}
+                >
+                  <span className="aui-thread-welcome-suggestion-title">
+                    {suggestion.title}
+                  </span>
+                  <span className="aui-thread-welcome-suggestion-label">
+                    {suggestion.label}
+                  </span>
+                </m.button>
+              ))}
             </div>
           </div>
         ) : (
@@ -315,18 +415,36 @@ export const AgentChat: FC = () => {
 
             if (message.role === 'user') {
               return (
-                <div key={message.id} className="message-row message-user">
-                  <div className="message-bubble message-user-bubble">
+                <m.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="aui-user-message-root"
+                  data-role="user"
+                >
+                  <div className="aui-user-message-content">
                     <div className="message-text">{message.content}</div>
                   </div>
-                </div>
+                </m.div>
               )
             }
 
+            const isLastMessage = message.id === messages[messages.length - 1]?.id
+            const isHovered = hoveredMessageId === message.id
+            const showActionBar = isLastMessage || isHovered || isStreamingMessage
+            const isCopied = copiedMessageId === message.id
+
             return (
-              <div key={message.id} className="message-row message-assistant">
-                <div className="message-avatar">A</div>
-                <div className="message-body">
+              <m.div
+                key={message.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="aui-assistant-message-root"
+                data-role="assistant"
+                onMouseEnter={() => setHoveredMessageId(message.id)}
+                onMouseLeave={() => setHoveredMessageId(null)}
+              >
+                <div className="aui-assistant-message-content">
                   {hasContent && (
                     <MarkdownMessage content={message.content} isStreaming={isStreamingMessage} />
                   )}
@@ -344,50 +462,78 @@ export const AgentChat: FC = () => {
                     <div className="message-text message-error">(Empty response)</div>
                   )}
                 </div>
-              </div>
+                <div
+                  className={`aui-assistant-action-bar-root ${showActionBar ? '' : 'aui-action-bar-hidden'} ${isHovered && !isLastMessage ? 'aui-action-bar-floating' : ''}`}
+                >
+                  <TooltipIconButton
+                    tooltip={isCopied ? 'Copied' : 'Copy'}
+                    onClick={() => handleCopyMessage(message.id, message.content)}
+                  >
+                    {isCopied ? <Check size={16} /> : <Copy size={16} />}
+                  </TooltipIconButton>
+                  <TooltipIconButton
+                    tooltip="Retry"
+                    onClick={handleRetry}
+                    disabled={isStreaming}
+                  >
+                    <RefreshCw size={16} />
+                  </TooltipIconButton>
+                  {isStreamingMessage && (
+                    <TooltipIconButton tooltip="Stop" onClick={handleStop}>
+                      <Square size={14} />
+                    </TooltipIconButton>
+                  )}
+                </div>
+              </m.div>
             )
           })
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <form className="chat-input-form" onSubmit={handleSubmit}>
-        <textarea
-          className="chat-input"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            validationError
-              ? 'Configure your API key to start...'
-              : 'Ask me to do something on this page...'
-          }
-          disabled={isStreaming || !!validationError}
-          rows={2}
-        />
-        {isStreaming ? (
-          <button
-            type="button"
-            className="send-button stop-button"
-            onClick={handleStop}
-            aria-label="Stop generation"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="send-button"
-            disabled={!canSend}
-            aria-label="Send message"
-          >
-            Send
-          </button>
-        )}
+      <form className="aui-composer-wrapper" onSubmit={handleSubmit}>
+        <div className="aui-composer-root">
+          <textarea
+            ref={textareaRef}
+            className="aui-composer-input"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              validationError
+                ? 'Configure your API key to start...'
+                : 'Send a message...'
+            }
+            disabled={isStreaming || !!validationError}
+            rows={1}
+            aria-label="Message input"
+          />
+          <div className="aui-composer-action-wrapper">
+            <div className="aui-composer-status">
+              {isStreaming ? 'Agent is working...' : 'Ready'}
+            </div>
+            {isStreaming ? (
+              <button
+                type="button"
+                className="aui-composer-cancel"
+                onClick={handleStop}
+                aria-label="Stop generation"
+              >
+                <Square size={14} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="aui-composer-send"
+                disabled={!canSend}
+                aria-label="Send message"
+              >
+                <ArrowUp size={16} />
+              </button>
+            )}
+          </div>
+        </div>
       </form>
-      <div className="composer-footer">
-        Agent outputs may be inaccurate. Verify critical details.
-      </div>
 
       {showSettings && (
         <div className="settings-overlay">
@@ -398,6 +544,8 @@ export const AgentChat: FC = () => {
           />
         </div>
       )}
-    </div>
+        </div>
+      </MotionConfig>
+    </LazyMotion>
   )
 }
