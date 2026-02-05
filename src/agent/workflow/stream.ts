@@ -1,7 +1,59 @@
-import { streamText } from 'ai'
+import { streamText, type CoreMessage, type UserContent } from 'ai'
 import { XMLStreamParser, STREAM_EVENT_TYPES, type ToolCallEvent } from '../streamParser'
-import type { AgentSession, StepResult, ToolCallInfo } from './types'
+import type { AgentSession, StepResult, ToolCallInfo, Message, ContentPart } from './types'
+import { getMessageText } from './types'
 import { getTracer, type SpanContext, type TracingConfig, type ChatMessage } from '../tracing'
+
+// Convert our Message format to Vercel AI SDK CoreMessage format
+function convertToSDKMessages(messages: Message[]): CoreMessage[] {
+  return messages.map(msg => {
+    if (typeof msg.content === 'string') {
+      return {
+        role: msg.role,
+        content: msg.content,
+      } as CoreMessage
+    }
+
+    // Multimodal content
+    if (msg.role === 'user') {
+      const userContent: UserContent = msg.content.map(part => {
+        switch (part.type) {
+          case 'text':
+            return { type: 'text' as const, text: part.text }
+          case 'image':
+            return {
+              type: 'image' as const,
+              image: part.image,
+              ...(part.mediaType && { mimeType: part.mediaType }),
+            }
+          case 'file':
+            return {
+              type: 'file' as const,
+              data: part.data,
+              mimeType: part.mediaType,
+              ...(part.filename && { name: part.filename }),
+            }
+        }
+      })
+      return {
+        role: 'user' as const,
+        content: userContent,
+      }
+    }
+
+    // Assistant messages - extract just text for now
+    // (assistant multimodal responses would need separate handling)
+    const textContent = msg.content
+      .filter((part): part is ContentPart & { type: 'text' } => part.type === 'text')
+      .map(part => part.text)
+      .join('')
+
+    return {
+      role: 'assistant' as const,
+      content: textContent,
+    }
+  })
+}
 
 export interface StreamTracingOptions {
   config: TracingConfig
@@ -17,11 +69,32 @@ export interface StreamCallbacks {
   tracing?: StreamTracingOptions
   reasoningEnabled?: boolean
   provider?: string
+  modelId?: string
 }
 
-function getProviderOptions(provider?: string, reasoningEnabled?: boolean): Record<string, unknown> | undefined {
+function isOpenAIReasoningModel(modelId?: string): boolean {
+  if (!modelId) return false
+  // Match o1, o1-mini, o1-pro, o3, o3-mini, o4-mini, etc.
+  // Also match openrouter format: openai/o1, openai/o3-mini, etc.
+  return /(?:^|\/)(o[1-4])(?:-|$)/i.test(modelId)
+}
+
+function isAnthropicModel(modelId?: string): boolean {
+  if (!modelId) return false
+  // Match anthropic/claude-* or just claude-*
+  return modelId.toLowerCase().includes('claude')
+}
+
+function isGoogleModel(modelId?: string): boolean {
+  if (!modelId) return false
+  // Match google/gemini-* or just gemini-*
+  return modelId.toLowerCase().includes('gemini')
+}
+
+function getProviderOptions(provider?: string, reasoningEnabled?: boolean, modelId?: string): Record<string, unknown> | undefined {
   if (!reasoningEnabled) return undefined
 
+  // Direct Anthropic provider
   if (provider === 'anthropic') {
     return {
       anthropic: {
@@ -33,13 +106,53 @@ function getProviderOptions(provider?: string, reasoningEnabled?: boolean): Reco
     }
   }
 
+  // Direct Google provider - just enable thought streaming, use model's default thinking level
   if (provider === 'google') {
     return {
       google: {
         thinkingConfig: {
-          thinkingBudget: 8000,
+          includeThoughts: true,
         },
       },
+    }
+  }
+
+  // Direct OpenAI provider with o-series models
+  if (provider === 'openai' && isOpenAIReasoningModel(modelId)) {
+    return {
+      openai: {
+        reasoningEffort: 'medium',
+      },
+    }
+  }
+
+  // OpenRouter - detect underlying provider from model ID
+  if (provider === 'openrouter') {
+    if (isOpenAIReasoningModel(modelId)) {
+      return {
+        openai: {
+          reasoningEffort: 'medium',
+        },
+      }
+    }
+    if (isAnthropicModel(modelId)) {
+      return {
+        anthropic: {
+          thinking: {
+            type: 'enabled',
+            budgetTokens: 16000,
+          },
+        },
+      }
+    }
+    if (isGoogleModel(modelId)) {
+      return {
+        google: {
+          thinkingConfig: {
+            includeThoughts: true,
+          },
+        },
+      }
     }
   }
 
@@ -63,10 +176,13 @@ export async function streamLLMResponse(
     provider: callbacks.tracing.provider,
     inputMessages: session.messages.map(m => ({
       role: m.role as ChatMessage['role'],
-      content: m.content,
+      content: getMessageText(m),  // Extract text for tracing
     })),
     parentContext: callbacks.tracing.parentContext,
   }) : null
+
+  // Convert messages to SDK format (handles multimodal content)
+  const sdkMessages = convertToSDKMessages(session.messages)
 
   parser.on(STREAM_EVENT_TYPES.TEXT_DELTA, (event) => {
     const delta = event.data as string
@@ -87,22 +203,23 @@ export async function streamLLMResponse(
   })
 
   try {
-    const providerOptions = getProviderOptions(callbacks?.provider, callbacks?.reasoningEnabled)
+    const providerOptions = getProviderOptions(callbacks?.provider, callbacks?.reasoningEnabled, callbacks?.modelId)
 
     const result = await streamText({
       model: session.model,
       system: session.systemPrompt,
-      messages: session.messages,
+      messages: sdkMessages,
       abortSignal: session.abortSignal,
-      providerOptions,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      providerOptions: providerOptions as any,
     })
 
     // Use fullStream to capture reasoning events
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
-        rawOutput += part.textDelta
-        parser.processChunk(part.textDelta)
-      } else if (part.type === 'reasoning') {
+        rawOutput += part.text
+        parser.processChunk(part.text)
+      } else if (part.type === 'reasoning-delta') {
         reasoning += part.text
         callbacks?.onReasoningDelta?.(part.text)
       }
