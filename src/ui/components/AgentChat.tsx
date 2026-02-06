@@ -10,8 +10,9 @@ import {
 } from 'react'
 import { LazyMotion, domAnimation, MotionConfig } from 'motion/react'
 import * as m from 'motion/react-m'
-import { ArrowUp, Brain, Check, Copy, RefreshCw, Square } from 'lucide-react'
+import { ArrowUp, Brain, Check, Copy, Pencil, RefreshCw, Square } from 'lucide-react'
 import { useSettings } from '../hooks/useSettings'
+import type { ThreadMessage } from '../hooks/useThreads'
 import {
   createProvider,
   validateSettings,
@@ -22,7 +23,7 @@ import {
   type Message as AgentMessage,
   type ContentPart,
 } from '@agent/index'
-import { SettingsPanel } from './SettingsPanel'
+import { SettingsPanel } from './settings'
 import { ToolCallDisplay } from './ToolCallDisplay'
 import { MarkdownMessage } from './MarkdownMessage'
 import { TooltipIconButton } from './TooltipIconButton'
@@ -31,6 +32,7 @@ import { ComposerMenu } from './ComposerMenu'
 import { AttachmentPreview, MessageAttachments } from './AttachmentPreview'
 import { ErrorNotification, createError, type NotificationError } from './ErrorNotification'
 import { ThinkingBlock } from './ThinkingBlock'
+import { BranchPicker } from './BranchPicker'
 import '../styles/attachments.css'
 
 const DEBUG = true
@@ -41,28 +43,85 @@ const logError = (...args: unknown[]) => console.error('[AgentChat]', ...args)
 
 interface Message {
   id: string
+  parentId?: string | null
   role: 'user' | 'assistant'
   content: string
   toolCalls?: ToolCallInfo[]
   attachments?: AttachmentFile[]
   reasoning?: string
+  siblingCount?: number
+  siblingIndex?: number
 }
 
-export const AgentChat: FC = () => {
+interface AddUserMessageResult extends ThreadMessage {
+  threadId: string
+}
+
+interface AgentChatProps {
+  threadId?: string | null
+  messages?: ThreadMessage[]
+  onAddUserMessage?: (content: string, attachments?: AttachmentFile[]) => Promise<AddUserMessageResult>
+  onAddAssistantMessage?: (threadId?: string, parentId?: string, modelInfo?: { model: string; provider: string }) => Promise<ThreadMessage>
+  onUpdateAssistantMessage?: (
+    id: string,
+    updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; model?: string; provider?: string }
+  ) => void
+  onClearThread?: () => Promise<void>
+  onNewThread?: () => Promise<void>
+  // Branch operations
+  onEditUserMessage?: (messageId: string, newContent: string, attachments?: AttachmentFile[]) => Promise<AddUserMessageResult>
+  onNavigateBranch?: (messageId: string, direction: 'prev' | 'next') => Promise<void>
+  onRegenerateAssistant?: (messageId: string) => Promise<void>
+  sidebarOpen?: boolean
+}
+
+export const AgentChat: FC<AgentChatProps> = ({
+  threadId: _threadId,
+  messages: messagesProp = [],
+  onAddUserMessage,
+  onAddAssistantMessage,
+  onUpdateAssistantMessage,
+  onClearThread,
+  onNewThread: _onNewThread,
+  onEditUserMessage,
+  onNavigateBranch,
+  onRegenerateAssistant,
+  sidebarOpen = false,
+}) => {
+  // Note: _threadId and _onNewThread are available for future use but currently unused
   const { settings, updateSettings, isLoading: settingsLoading } = useSettings()
   const [showSettings, setShowSettings] = useState(false)
   const [inputValue, setInputValue] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
+  // No local messages state - use props directly
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const messagesRef = useRef<Message[]>([])
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [notificationErrors, setNotificationErrors] = useState<NotificationError[]>([])
+  // Edit mode state
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Convert prop messages to local Message type for rendering
+  const messages: Message[] = useMemo(() =>
+    messagesProp.map((m) => ({
+      id: m.id,
+      parentId: m.parentId,
+      role: m.role,
+      content: m.content,
+      toolCalls: m.toolCalls,
+      attachments: m.attachments,
+      reasoning: m.reasoning,
+      siblingCount: m.siblingCount,
+      siblingIndex: m.siblingIndex,
+    })),
+    [messagesProp]
+  )
 
   const tabId = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -71,13 +130,15 @@ export const AgentChat: FC = () => {
     return id
   }, [])
 
+  // Auto-scroll when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Clear edit mode when messages change
   useEffect(() => {
-    messagesRef.current = messages
-  }, [messages])
+    setEditingMessageId(null)
+  }, [messagesProp])
 
   const validationError = validateSettings(settings)
 
@@ -105,22 +166,61 @@ export const AgentChat: FC = () => {
       setAttachments([])
       setError(null)
 
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: text,
-        attachments: messageAttachments.length > 0 ? messageAttachments : undefined,
+      // Helper to build content for LLM (handles attachments)
+      const buildMessageContent = (content: string, attachments?: AttachmentFile[]): string | ContentPart[] => {
+        if (!attachments || attachments.length === 0) {
+          return content
+        }
+        const parts: ContentPart[] = []
+        if (content.trim()) {
+          parts.push({ type: 'text', text: content })
+        }
+        for (const att of attachments) {
+          if (att.type === 'image') {
+            parts.push({ type: 'image', image: att.dataUrl, mediaType: att.mediaType })
+          } else {
+            parts.push({ type: 'file', data: att.dataUrl, mediaType: att.mediaType, filename: att.file.name })
+          }
+        }
+        return parts
       }
-      setMessages((prev) => [...prev, userMessage])
 
-      const assistantMessageId = (Date.now() + 1).toString()
-      setMessages((prev) => [...prev, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
-        toolCalls: [],
-        reasoning: '',
-      }])
+      // Build conversation history from current props BEFORE any state changes
+      // This avoids race conditions with React state updates
+      const conversationHistory: AgentMessage[] = messages
+        .filter((m) => m.content?.trim() || m.attachments?.length)
+        .map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: buildMessageContent(m.content, m.attachments),
+        }))
+
+      // Now update state - create user message and assistant placeholder
+      let userMessageId: string
+      let messageThreadId: string | undefined
+      if (onAddUserMessage) {
+        const stored = await onAddUserMessage(text, messageAttachments)
+        userMessageId = stored.id
+        messageThreadId = stored.threadId
+      } else {
+        userMessageId = Date.now().toString()
+      }
+
+      let assistantMessageId: string
+      if (onAddAssistantMessage) {
+        const stored = await onAddAssistantMessage(messageThreadId, userMessageId, {
+          model: settings.model,
+          provider: settings.provider,
+        })
+        assistantMessageId = stored.id
+      } else {
+        assistantMessageId = (Date.now() + 1).toString()
+      }
+
+      // Build final messages for LLM: history + new user message
+      const agentMessages: AgentMessage[] = [
+        ...conversationHistory,
+        { role: 'user' as const, content: buildMessageContent(text, messageAttachments) },
+      ]
 
       setIsStreaming(true)
       abortControllerRef.current = new AbortController()
@@ -129,48 +229,19 @@ export const AgentChat: FC = () => {
         log('Creating provider:', settings.provider, settings.model)
         const model = createProvider(settings)
 
-        // Build agent messages, converting attachments to content parts
-        const buildMessageContent = (msg: Message): string | ContentPart[] => {
-          if (!msg.attachments || msg.attachments.length === 0) {
-            return msg.content
-          }
-          // Multimodal message with attachments
-          const parts: ContentPart[] = []
-          if (msg.content.trim()) {
-            parts.push({ type: 'text', text: msg.content })
-          }
-          for (const att of msg.attachments) {
-            if (att.type === 'image') {
-              parts.push({ type: 'image', image: att.dataUrl, mediaType: att.mediaType })
-            } else {
-              parts.push({ type: 'file', data: att.dataUrl, mediaType: att.mediaType, filename: att.file.name })
-            }
-          }
-          return parts
-        }
-
-        const agentMessages: AgentMessage[] = [
-          ...messagesRef.current
-            .filter((m) => (m.content && m.content.trim().length > 0 && !m.content.includes('(No response')) || (m.attachments && m.attachments.length > 0))
-            .map((m) => ({
-              role: m.role as 'user' | 'assistant',
-              content: buildMessageContent(m),
-            })),
-          { role: 'user' as const, content: buildMessageContent({ ...userMessage, content: text, attachments: messageAttachments }) },
-        ]
-
         let accumulatedText = ''
         let accumulatedReasoning = ''
         const accumulatedToolCalls: ToolCallInfo[] = []
 
-        const updateAssistantMessage = () => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: accumulatedText, toolCalls: [...accumulatedToolCalls], reasoning: accumulatedReasoning }
-                : m
-            )
-          )
+        // Update via callback - useThreads handles state + persistence with RAF batching
+        const updateAssistant = () => {
+          if (onUpdateAssistantMessage) {
+            onUpdateAssistantMessage(assistantMessageId, {
+              content: accumulatedText,
+              reasoning: accumulatedReasoning,
+              toolCalls: accumulatedToolCalls,
+            })
+          }
         }
 
         // Determine effective reasoning: 'always' models always have it enabled
@@ -189,22 +260,22 @@ export const AgentChat: FC = () => {
           callbacks: {
             onTextDelta: (delta) => {
               accumulatedText += delta
-              updateAssistantMessage()
+              updateAssistant()
             },
             onReasoningDelta: (delta) => {
               accumulatedReasoning += delta
-              updateAssistantMessage()
+              updateAssistant()
             },
             onToolStart: (toolCall) => {
               accumulatedToolCalls.push(toolCall)
-              updateAssistantMessage()
+              updateAssistant()
             },
             onToolDone: (toolCall) => {
               const index = accumulatedToolCalls.findIndex(tc => tc.id === toolCall.id)
               if (index !== -1) {
                 accumulatedToolCalls[index] = toolCall
               }
-              updateAssistantMessage()
+              updateAssistant()
             },
           },
           tracing: settings.tracing,
@@ -220,22 +291,13 @@ export const AgentChat: FC = () => {
           toolCalls: result.toolCalls.length
         })
 
-        if (result.text || result.toolCalls.length > 0) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: result.text, toolCalls: result.toolCalls }
-                : m
-            )
-          )
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: '(No response received from the model)' }
-                : m
-            )
-          )
+        // Final update with complete result - just save what we got
+        if (onUpdateAssistantMessage) {
+          onUpdateAssistantMessage(assistantMessageId, {
+            content: result.text,
+            reasoning: accumulatedReasoning,
+            toolCalls: result.toolCalls,
+          })
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error'
@@ -245,24 +307,13 @@ export const AgentChat: FC = () => {
         if (!isAbortError) {
           setError(errorMessage)
         }
-
-        setMessages((prev) => {
-          const assistantMsg = prev.find((m) => m.id === assistantMessageId)
-          const hasContent = assistantMsg?.content && assistantMsg.content.trim().length > 0
-          const hasToolCalls = assistantMsg?.toolCalls && assistantMsg.toolCalls.length > 0
-
-          if (!hasContent && !hasToolCalls) {
-            return prev.filter((m) => m.id !== assistantMessageId)
-          }
-          return prev
-        })
       } finally {
         setIsStreaming(false)
         abortControllerRef.current = null
         log('=== Agent loop finished ===')
       }
     },
-    [isStreaming, validationError, settings, tabId]
+    [isStreaming, validationError, settings, tabId, messages, onAddUserMessage, onAddAssistantMessage, onUpdateAssistantMessage]
   )
 
   const handleSubmit = useCallback(
@@ -296,10 +347,12 @@ export const AgentChat: FC = () => {
     [canSend, handleSubmit]
   )
 
-  const handleClear = useCallback(() => {
-    setMessages([])
+  const handleClear = useCallback(async () => {
+    if (onClearThread) {
+      await onClearThread()
+    }
     setError(null)
-  }, [])
+  }, [onClearThread])
 
   const handleSuggestion = useCallback((text: string) => {
     sendMessage(text, [])
@@ -313,7 +366,8 @@ export const AgentChat: FC = () => {
     setAttachments(prev => prev.filter(a => a.id !== id))
   }, [])
 
-  const handleAddError = useCallback((message: string, details?: string) => {
+  // Available for future use
+  const _handleAddError = useCallback((message: string, details?: string) => {
     setNotificationErrors(prev => [...prev, createError(message, details)])
   }, [])
 
@@ -332,11 +386,177 @@ export const AgentChat: FC = () => {
   }, [])
 
   const handleRetry = useCallback(() => {
-    const lastUser = [...messagesRef.current].reverse().find((m) => m.role === 'user')
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
     if (lastUser?.content) {
       sendMessage(lastUser.content)
     }
-  }, [sendMessage])
+  }, [messages, sendMessage])
+
+  // ============================================================================
+  // Edit & Branch Handlers
+  // ============================================================================
+
+  const handleStartEdit = useCallback((messageId: string, content: string) => {
+    setEditingMessageId(messageId)
+    setEditContent(content)
+    // Focus the textarea after render
+    setTimeout(() => editTextareaRef.current?.focus(), 0)
+  }, [])
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null)
+    setEditContent('')
+  }, [])
+
+  const handleSubmitEdit = useCallback(async () => {
+    if (!editingMessageId || !editContent.trim() || !onEditUserMessage) return
+
+    // Capture the edited content and the message being edited
+    const newContent = editContent.trim()
+    const originalMessageId = editingMessageId
+
+    // Helper to build content for LLM
+    const buildMessageContent = (content: string, attachments?: AttachmentFile[]): string | ContentPart[] => {
+      if (!attachments || attachments.length === 0) {
+        return content
+      }
+      const parts: ContentPart[] = []
+      if (content.trim()) {
+        parts.push({ type: 'text', text: content })
+      }
+      for (const att of attachments) {
+        if (att.type === 'image') {
+          parts.push({ type: 'image', image: att.dataUrl, mediaType: att.mediaType })
+        } else {
+          parts.push({ type: 'file', data: att.dataUrl, mediaType: att.mediaType, filename: att.file.name })
+        }
+      }
+      return parts
+    }
+
+    // Build conversation history BEFORE state changes
+    // Exclude the original message being edited and everything after it
+    const originalMsgIndex = messages.findIndex((m) => m.id === originalMessageId)
+    const conversationHistory: AgentMessage[] = messages
+      .slice(0, originalMsgIndex) // Only messages before the one being edited
+      .filter((m) => m.content?.trim())
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: buildMessageContent(m.content, m.attachments),
+      }))
+
+    try {
+      setEditingMessageId(null)
+      setIsStreaming(true)
+      abortControllerRef.current = new AbortController()
+
+      // Edit creates a new branch and triggers a new response
+      const result = await onEditUserMessage(originalMessageId, newContent)
+
+      // Now send to get assistant response
+      if (onAddAssistantMessage) {
+        const assistantMsg = await onAddAssistantMessage(result.threadId, result.id, {
+          model: settings.model,
+          provider: settings.provider,
+        })
+
+        // Build final messages: history + edited user message
+        const agentMessages: AgentMessage[] = [
+          ...conversationHistory,
+          { role: 'user' as const, content: newContent },
+        ]
+
+        const model = createProvider(settings)
+
+        let accumulatedText = ''
+        let accumulatedReasoning = ''
+        const accumulatedToolCalls: ToolCallInfo[] = []
+
+        const updateAssistant = () => {
+          if (onUpdateAssistantMessage) {
+            onUpdateAssistantMessage(assistantMsg.id, {
+              content: accumulatedText,
+              reasoning: accumulatedReasoning,
+              toolCalls: accumulatedToolCalls,
+            })
+          }
+        }
+
+        const modelConfig = getModelConfig(settings.provider, settings.model)
+        const effectiveReasoningEnabled =
+          modelConfig?.reasoning === 'always' ? true :
+          modelConfig?.reasoning === 'hybrid' ? settings.reasoningEnabled :
+          false
+
+        const workflowResult = await runWorkflow({
+          model,
+          messages: agentMessages,
+          tabId,
+          maxSteps: MAX_STEPS,
+          abortSignal: abortControllerRef.current?.signal,
+          callbacks: {
+            onTextDelta: (delta) => {
+              accumulatedText += delta
+              updateAssistant()
+            },
+            onReasoningDelta: (delta) => {
+              accumulatedReasoning += delta
+              updateAssistant()
+            },
+            onToolStart: (toolCall) => {
+              accumulatedToolCalls.push(toolCall)
+              updateAssistant()
+            },
+            onToolDone: (toolCall) => {
+              const index = accumulatedToolCalls.findIndex(tc => tc.id === toolCall.id)
+              if (index !== -1) accumulatedToolCalls[index] = toolCall
+              updateAssistant()
+            },
+          },
+          tracing: settings.tracing,
+          modelName: settings.model,
+          provider: settings.provider,
+          reasoningEnabled: effectiveReasoningEnabled,
+        })
+
+        // Final update
+        if (workflowResult.text || workflowResult.toolCalls.length > 0) {
+          if (onUpdateAssistantMessage) {
+            onUpdateAssistantMessage(assistantMsg.id, {
+              content: workflowResult.text,
+              reasoning: accumulatedReasoning,
+              toolCalls: workflowResult.toolCalls,
+            })
+          }
+        }
+      }
+    } catch (err) {
+      logError('Edit message failed:', err)
+    } finally {
+      setIsStreaming(false)
+      abortControllerRef.current = null
+    }
+  }, [editingMessageId, editContent, messages, settings, tabId, onEditUserMessage, onAddAssistantMessage, onUpdateAssistantMessage])
+
+  const handleNavigateBranch = useCallback(async (messageId: string, direction: 'prev' | 'next') => {
+    if (!onNavigateBranch || isStreaming) return
+    await onNavigateBranch(messageId, direction)
+  }, [onNavigateBranch, isStreaming])
+
+  // Available for future use - regenerate assistant response
+  const _handleRegenerate = useCallback(async (messageId: string) => {
+    if (!onRegenerateAssistant || isStreaming) return
+
+    // Delete the assistant message
+    await onRegenerateAssistant(messageId)
+
+    // The messages will be reloaded, and we need to add a new assistant message
+    // and trigger the workflow. This is handled by the parent re-rendering with new messages.
+    // For now, we'll trigger via handleRetry-like logic after the reload.
+    setTimeout(() => {
+      handleRetry()
+    }, 100)
+  }, [onRegenerateAssistant, isStreaming, handleRetry])
 
   const handleOpenSettings = useCallback(() => {
     setShowSettings(true)
@@ -349,8 +569,7 @@ export const AgentChat: FC = () => {
   const handleSaveSettings = useCallback(
     async (newSettings: Parameters<typeof updateSettings>[0]) => {
       await updateSettings(newSettings)
-      setMessages([])
-      setError(null)
+      // Don't clear messages on settings save anymore - they're persisted
     },
     [updateSettings]
   )
@@ -404,32 +623,34 @@ export const AgentChat: FC = () => {
       <MotionConfig reducedMotion="user">
         <div className="agent-chat aui-thread-root">
           <div className="aui-topbar">
-        <div className="aui-topbar-info">
-          <span className="provider-badge">{currentProvider.name}</span>
-          <span className="model-name">{settings.model}</span>
-          {tabId > 0 && <span className="tab-badge">Tab {tabId}</span>}
-        </div>
-        <div className="aui-topbar-actions">
-          {messages.length > 0 && (
-            <button
-              type="button"
-              className="button-icon"
-              onClick={handleClear}
-              aria-label="Clear chat"
-            >
-              Clear
-            </button>
-          )}
-          <button
-            type="button"
-            className="button-icon"
-            onClick={handleOpenSettings}
-            aria-label="Open settings"
-          >
-            Settings
-          </button>
-        </div>
-      </div>
+            <div className="aui-topbar-info">
+              {/* Add spacing when sidebar is closed to account for toggle button */}
+              {!sidebarOpen && <div style={{ width: 44 }} />}
+              <span className="provider-badge">{currentProvider.name}</span>
+              <span className="model-name">{settings.model}</span>
+              {tabId > 0 && <span className="tab-badge">Tab {tabId}</span>}
+            </div>
+            <div className="aui-topbar-actions">
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  className="button-icon"
+                  onClick={handleClear}
+                  aria-label="New chat"
+                >
+                  New
+                </button>
+              )}
+              <button
+                type="button"
+                className="button-icon"
+                onClick={handleOpenSettings}
+                aria-label="Open settings"
+              >
+                Settings
+              </button>
+            </div>
+          </div>
 
       {displayError && (
         <div className="error-banner">
@@ -499,6 +720,11 @@ export const AgentChat: FC = () => {
             const isStreamingMessage = isStreaming && message.id === messages[messages.length - 1]?.id
 
             if (message.role === 'user') {
+              const isEditing = editingMessageId === message.id
+              const isUserHovered = hoveredMessageId === message.id
+              const hasBranches = (message.siblingCount ?? 1) > 1
+              const canShowBranchPicker = hasBranches && !isStreaming
+
               return (
                 <m.div
                   key={message.id}
@@ -506,13 +732,77 @@ export const AgentChat: FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   className="aui-user-message-root"
                   data-role="user"
+                  onMouseEnter={() => setHoveredMessageId(message.id)}
+                  onMouseLeave={() => setHoveredMessageId(null)}
                 >
-                  <div className="aui-user-message-content">
-                    {message.content && <div className="message-text">{message.content}</div>}
-                    {message.attachments && message.attachments.length > 0 && (
-                      <MessageAttachments attachments={message.attachments} />
-                    )}
-                  </div>
+                  {isEditing ? (
+                    // Edit mode
+                    <div className="aui-user-message-edit">
+                      <textarea
+                        ref={editTextareaRef}
+                        className="aui-user-message-edit-textarea"
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSubmitEdit()
+                          } else if (e.key === 'Escape') {
+                            handleCancelEdit()
+                          }
+                        }}
+                        rows={3}
+                      />
+                      <div className="aui-user-message-edit-actions">
+                        <button
+                          type="button"
+                          className="aui-user-message-edit-cancel"
+                          onClick={handleCancelEdit}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="aui-user-message-edit-submit"
+                          onClick={handleSubmitEdit}
+                          disabled={!editContent.trim()}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Normal display mode
+                    <>
+                      <div className="aui-user-message-content">
+                        {message.content && <div className="message-text">{message.content}</div>}
+                        {message.attachments && message.attachments.length > 0 && (
+                          <MessageAttachments attachments={message.attachments} />
+                        )}
+                        {/* Edit button - show on hover when not streaming */}
+                        {isUserHovered && !isStreaming && onEditUserMessage && (
+                          <button
+                            type="button"
+                            className="aui-user-message-edit-btn"
+                            onClick={() => handleStartEdit(message.id, message.content)}
+                            aria-label="Edit message"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </div>
+                      {/* Branch picker - show when message has siblings and not streaming */}
+                      {canShowBranchPicker && (
+                        <BranchPicker
+                          currentIndex={message.siblingIndex ?? 0}
+                          total={message.siblingCount ?? 1}
+                          onPrev={() => handleNavigateBranch(message.id, 'prev')}
+                          onNext={() => handleNavigateBranch(message.id, 'next')}
+                          disabled={isStreaming}
+                        />
+                      )}
+                    </>
+                  )}
                 </m.div>
               )
             }
