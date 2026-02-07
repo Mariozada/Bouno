@@ -2,7 +2,7 @@ import { db } from './db'
 import type { StoredMessage } from './types'
 import { generateId, generateThreadTitle } from './types'
 import type { AttachmentFile } from '@ui/components/FileAttachment'
-import type { ToolCallInfo } from '@agent/index'
+import type { ToolCallInfo, AssistantMessageSegment } from '@agent/index'
 import { storeAttachment } from './attachmentStorage'
 
 const DEBUG = false
@@ -14,6 +14,7 @@ export interface MessageInput {
   parentId?: string | null
   reasoning?: string
   toolCalls?: ToolCallInfo[]
+  assistantSegments?: AssistantMessageSegment[]
   attachments?: AttachmentFile[]
   model?: string
   provider?: string
@@ -43,6 +44,7 @@ export async function addMessage(
     content: input.content,
     reasoning: input.reasoning,
     toolCalls: input.toolCalls,
+    assistantSegments: input.assistantSegments,
     attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
     createdAt: now,
     model: input.model,
@@ -78,7 +80,7 @@ export async function getMessages(threadId: string): Promise<StoredMessage[]> {
 
 export async function updateMessage(
   id: string,
-  updates: Partial<Pick<StoredMessage, 'content' | 'reasoning' | 'toolCalls' | 'model' | 'provider'>>
+  updates: Partial<Pick<StoredMessage, 'content' | 'reasoning' | 'toolCalls' | 'assistantSegments' | 'model' | 'provider'>>
 ): Promise<void> {
   await db.messages.update(id, updates)
   log('Updated message:', id)

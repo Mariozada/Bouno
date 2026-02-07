@@ -15,6 +15,7 @@ export type {
   AgentResult,
   AgentCallbacks,
   ToolCallInfo,
+  AssistantMessageSegment,
   Message,
   MessageContent,
   ContentPart,

@@ -3,7 +3,7 @@ import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { WelcomeScreen } from './WelcomeScreen'
 import type { AttachmentFile } from '../FileAttachment'
-import type { ToolCallInfo } from '@agent/index'
+import type { ToolCallInfo, AssistantMessageSegment } from '@agent/index'
 
 export interface Message {
   id: string
@@ -11,6 +11,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   toolCalls?: ToolCallInfo[]
+  assistantSegments?: AssistantMessageSegment[]
   attachments?: AttachmentFile[]
   reasoning?: string
   siblingCount?: number
@@ -127,6 +128,7 @@ export const MessageList: FC<MessageListProps> = ({
             content={message.content}
             reasoning={message.reasoning}
             toolCalls={message.toolCalls}
+            assistantSegments={message.assistantSegments}
             isStreaming={isStreamingMessage}
             isLastMessage={isLastMessage}
             isHovered={hoveredMessageId === message.id}

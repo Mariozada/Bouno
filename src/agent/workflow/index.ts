@@ -8,6 +8,7 @@ export type {
   ImagePart,
   FilePart,
   ToolCallInfo,
+  AssistantMessageSegment,
   ToolExecutor,
   AgentConfig,
   AgentSession,

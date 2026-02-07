@@ -20,6 +20,83 @@ console.log('Bouno: Registered tools:', getRegisteredTools())
 
 // Track which tab currently has the glow overlay
 let glowTabId: number | null = null
+const MIN_GLOW_VISIBLE_MS = 3000
+
+interface GlowState {
+  shownAt: number
+  hideTimerId?: number
+}
+
+const glowStates = new Map<number, GlowState>()
+
+function clearGlowHideTimer(tabId: number, state?: GlowState): GlowState | null {
+  const target = state ?? glowStates.get(tabId)
+  if (!target) return null
+
+  if (target.hideTimerId !== undefined) {
+    clearTimeout(target.hideTimerId)
+    delete target.hideTimerId
+  }
+
+  return target
+}
+
+function showGlowOnTab(tabId: number): void {
+  const existing = clearGlowHideTimer(tabId)
+  if (!existing) {
+    glowStates.set(tabId, { shownAt: Date.now() })
+  }
+
+  // Always re-send to survive same-tab navigations/content-script reloads.
+  chrome.tabs.sendMessage(tabId, { type: MessageTypes.SET_SCREEN_GLOW, active: true }).catch(() => {})
+}
+
+function hideGlowOnTabWithMinimum(tabId: number): void {
+  const state = glowStates.get(tabId)
+  if (!state) return
+
+  clearGlowHideTimer(tabId, state)
+
+  const elapsed = Date.now() - state.shownAt
+  const delay = Math.max(0, MIN_GLOW_VISIBLE_MS - elapsed)
+
+  const hide = () => {
+    const current = glowStates.get(tabId)
+    if (!current) return
+    if (current.hideTimerId !== undefined) {
+      delete current.hideTimerId
+    }
+
+    chrome.tabs.sendMessage(tabId, { type: MessageTypes.SET_SCREEN_GLOW, active: false }).catch(() => {})
+    glowStates.delete(tabId)
+
+    if (glowTabId === tabId) {
+      glowTabId = null
+    }
+  }
+
+  if (delay === 0) {
+    hide()
+    return
+  }
+
+  state.hideTimerId = setTimeout(hide, delay)
+}
+
+function switchGlowToTab(tabId: number): void {
+  if (glowTabId && glowTabId !== tabId) {
+    hideGlowOnTabWithMinimum(glowTabId)
+  }
+  glowTabId = tabId
+  showGlowOnTab(tabId)
+}
+
+function hideAllGlowsWithMinimum(): void {
+  for (const tabId of Array.from(glowStates.keys())) {
+    hideGlowOnTabWithMinimum(tabId)
+  }
+  glowTabId = null
+}
 
 function asNumberPair(value: unknown): [number, number] | undefined {
   if (!Array.isArray(value) || value.length !== 2) return undefined
@@ -221,6 +298,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  const glowState = clearGlowHideTimer(tabId)
+  if (glowState) {
+    glowStates.delete(tabId)
+  }
+  if (glowTabId === tabId) {
+    glowTabId = null
+  }
+
   tabGroups.removeTab(tabId)
   clearTabData(tabId)
 })
@@ -313,9 +398,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (type === MessageTypes.SET_SCREEN_GLOW) {
     const { active } = message as { active: boolean }
 
-    if (!active && glowTabId) {
-      chrome.tabs.sendMessage(glowTabId, { type: MessageTypes.SET_SCREEN_GLOW, active: false }).catch(() => {})
-      glowTabId = null
+    if (!active) {
+      hideAllGlowsWithMinimum()
     }
     sendResponse({ success: true })
     return true
@@ -362,13 +446,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const toolGroupId = params.groupId as number | undefined
     const toolTabId = params.tabId as number | undefined
 
-    // Auto-manage glow: always re-send so glow survives same-tab navigations
+    // Auto-manage glow for the active tool tab.
     if (toolTabId) {
-      if (glowTabId && glowTabId !== toolTabId) {
-        chrome.tabs.sendMessage(glowTabId, { type: MessageTypes.SET_SCREEN_GLOW, active: false }).catch(() => {})
-      }
-      glowTabId = toolTabId
-      chrome.tabs.sendMessage(toolTabId, { type: MessageTypes.SET_SCREEN_GLOW, active: true }).catch(() => {})
+      switchGlowToTab(toolTabId)
     }
 
     // Validate that the target tab belongs to the agent's group
@@ -391,11 +471,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (tool === 'tabs_create' && result.success && result.result) {
         const newTabId = (result.result as { id?: number }).id
         if (newTabId) {
-          if (glowTabId && glowTabId !== newTabId) {
-            chrome.tabs.sendMessage(glowTabId, { type: MessageTypes.SET_SCREEN_GLOW, active: false }).catch(() => {})
-          }
-          glowTabId = newTabId
-          chrome.tabs.sendMessage(newTabId, { type: MessageTypes.SET_SCREEN_GLOW, active: true }).catch(() => {})
+          switchGlowToTab(newTabId)
         }
       }
 
