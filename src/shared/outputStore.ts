@@ -30,12 +30,15 @@ export function formatStoredPreview(id: string, toolName: string, output: string
 
   const head = output.slice(0, OUTPUT_PREVIEW_CHARS)
   const tail = output.slice(-OUTPUT_PREVIEW_CHARS)
+  const omitted = totalChars - OUTPUT_PREVIEW_CHARS * 2
 
   return [
     `[Large output stored: id="${id}", ${totalLines} lines, ${totalChars} chars]`,
     '',
     `--- First ${OUTPUT_PREVIEW_CHARS} chars ---`,
     head,
+    '',
+    `--- ${omitted.toLocaleString()} chars omitted ---`,
     '',
     `--- Last ${OUTPUT_PREVIEW_CHARS} chars ---`,
     tail,

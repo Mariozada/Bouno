@@ -147,13 +147,7 @@ function renderBestPractices(): string {
 
 5. **Be concise**: Report what you did and what happened. Don't over-explain unless the user asks for details.
 
-## Large Output Handling
-
-When a tool returns more than 25,000 characters, the output is automatically stored and you receive a preview (first and last 10,000 chars) with a result_id. To explore the full output:
-
-- \`read_result(result_id, offset, limit)\` — read specific line ranges (1-indexed)
-- \`read_result(result_id, pattern="...")\` — search for lines matching a regex pattern
-- \`process_result(result_id, code)\` — run JavaScript on the stored data (available as \`DATA\` string variable)`
+Large tool outputs (>25k chars) are automatically stored with a result_id. Use \`read_result\` to paginate or search, or \`process_result\` to run JS on the data.`
 }
 
 function renderSafety(): string {
