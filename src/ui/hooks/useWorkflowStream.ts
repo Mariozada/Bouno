@@ -112,6 +112,8 @@ export function useWorkflowStream({
       let accumulatedReasoning = ''
       const accumulatedToolCalls: ToolCallInfo[] = []
 
+      let glowActive = false
+
       const updateAssistant = () => {
         if (onUpdateAssistantMessage) {
           onUpdateAssistantMessage(assistantMessageId, {
@@ -139,6 +141,10 @@ export function useWorkflowStream({
         abortSignal,
         callbacks: {
           onTextDelta: (delta) => {
+            if (glowActive) {
+              sendScreenGlow(false, tabId, groupId)
+              glowActive = false
+            }
             accumulatedText += delta
             updateAssistant()
           },
@@ -147,6 +153,10 @@ export function useWorkflowStream({
             updateAssistant()
           },
           onToolStart: (toolCall) => {
+            if (!glowActive) {
+              sendScreenGlow(true, tabId, groupId)
+              glowActive = true
+            }
             const exists = accumulatedToolCalls.some((tc) => tc.id === toolCall.id)
             if (!exists) {
               accumulatedToolCalls.push(toolCall)
@@ -227,7 +237,6 @@ export function useWorkflowStream({
       ]
 
       setIsStreaming(true)
-      sendScreenGlow(true, tabId, groupId)
       abortControllerRef.current = new AbortController()
 
       try {
@@ -260,7 +269,6 @@ export function useWorkflowStream({
       const conversationHistory = buildConversationHistory(messagesBeforeEdit)
 
       setIsStreaming(true)
-      sendScreenGlow(true, tabId, groupId)
       abortControllerRef.current = new AbortController()
 
       try {
