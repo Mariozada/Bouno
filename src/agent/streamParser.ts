@@ -31,8 +31,15 @@ export interface StreamEvent {
 
 type EventListener = (event: StreamEvent) => void
 
-const BLOCK_OPEN = '<tool_calls>'
-const BLOCK_CLOSE = '</tool_calls>'
+interface ToolCallBlockTag {
+  open: string
+  close: string
+}
+
+const TOOL_CALL_BLOCK_TAGS: ToolCallBlockTag[] = [
+  { open: '<tool_calls>', close: '</tool_calls>' },
+  { open: '<tools_call>', close: '</tools_call>' },
+]
 const INVOKE_CLOSE = '</invoke>'
 let domParser: DOMParser | null = null
 function getDOMParser(): DOMParser {
@@ -49,6 +56,7 @@ export class XMLStreamParser {
   private buffer = ''
   private textBuffer = ''
   private inBlock = false
+  private activeBlockCloseTag: string | null = null
   private invokeBuffer = ''
   private listeners: Map<StreamEventType | '*', EventListener[]> = new Map()
   private toolCallCounter = 0
@@ -58,8 +66,9 @@ export class XMLStreamParser {
 
     while (this.buffer.length > 0) {
       if (this.inBlock) {
+        const blockCloseTag = this.activeBlockCloseTag || TOOL_CALL_BLOCK_TAGS[0].close
         // Check for block close first — the block may end without a pending invoke
-        const blockClose = this.buffer.indexOf(BLOCK_CLOSE)
+        const blockClose = this.buffer.indexOf(blockCloseTag)
         const invokeClose = this.buffer.indexOf(INVOKE_CLOSE)
 
         if (invokeClose !== -1 && (blockClose === -1 || invokeClose < blockClose)) {
@@ -70,18 +79,13 @@ export class XMLStreamParser {
           this._emitInvoke()
         } else if (blockClose !== -1) {
           // Block closes (any trailing whitespace between last </invoke> and </tool_calls> is ignored)
-          this.buffer = this.buffer.substring(blockClose + BLOCK_CLOSE.length)
+          this.buffer = this.buffer.substring(blockClose + blockCloseTag.length)
           this.inBlock = false
+          this.activeBlockCloseTag = null
           this.invokeBuffer = ''
         } else {
           // Neither found — keep partial data, check for split close tags
-          const partial = Math.min(
-            findPartialSuffix(this.buffer, INVOKE_CLOSE),
-            findPartialSuffix(this.buffer, BLOCK_CLOSE)
-          )
-          const splitAt = partial === -1
-            ? Math.max(findPartialSuffix(this.buffer, INVOKE_CLOSE), findPartialSuffix(this.buffer, BLOCK_CLOSE))
-            : partial
+          const splitAt = getEarliestPartialIndex(this.buffer, [INVOKE_CLOSE, blockCloseTag])
 
           if (splitAt !== -1) {
             this.invokeBuffer += this.buffer.substring(0, splitAt)
@@ -93,17 +97,18 @@ export class XMLStreamParser {
           break
         }
       } else {
-        const openIndex = this.buffer.indexOf(BLOCK_OPEN)
+        const nextBlock = findNextBlockOpen(this.buffer)
 
-        if (openIndex !== -1) {
-          if (openIndex > 0) {
-            this._emitTextDelta(this.buffer.substring(0, openIndex))
+        if (nextBlock) {
+          if (nextBlock.index > 0) {
+            this._emitTextDelta(this.buffer.substring(0, nextBlock.index))
           }
           this.inBlock = true
+          this.activeBlockCloseTag = nextBlock.block.close
           this.invokeBuffer = ''
-          this.buffer = this.buffer.substring(openIndex + BLOCK_OPEN.length)
+          this.buffer = this.buffer.substring(nextBlock.index + nextBlock.block.open.length)
         } else {
-          const partial = findPartialSuffix(this.buffer, BLOCK_OPEN)
+          const partial = getEarliestPartialIndex(this.buffer, TOOL_CALL_BLOCK_TAGS.map((block) => block.open))
           if (partial !== -1) {
             if (partial > 0) {
               this._emitTextDelta(this.buffer.substring(0, partial))
@@ -120,6 +125,15 @@ export class XMLStreamParser {
   }
 
   flush(): void {
+    if (this.inBlock) {
+      // Try to parse any complete pending invokes, then discard incomplete tool XML.
+      this.processChunk('')
+      this.buffer = ''
+      this.invokeBuffer = ''
+      this.inBlock = false
+      this.activeBlockCloseTag = null
+    }
+
     if (this.buffer) {
       this._emitTextDelta(this.buffer)
       this.buffer = ''
@@ -144,6 +158,7 @@ export class XMLStreamParser {
     this.buffer = ''
     this.textBuffer = ''
     this.inBlock = false
+    this.activeBlockCloseTag = null
     this.invokeBuffer = ''
   }
 
@@ -223,4 +238,32 @@ function findPartialSuffix(buffer: string, tag: string): number {
     if (tag.startsWith(buffer.substring(i))) return i
   }
   return -1
+}
+
+function findNextBlockOpen(buffer: string): { index: number; block: ToolCallBlockTag } | null {
+  let match: { index: number; block: ToolCallBlockTag } | null = null
+
+  for (const block of TOOL_CALL_BLOCK_TAGS) {
+    const idx = buffer.indexOf(block.open)
+    if (idx === -1) continue
+    if (!match || idx < match.index) {
+      match = { index: idx, block }
+    }
+  }
+
+  return match
+}
+
+function getEarliestPartialIndex(buffer: string, tags: string[]): number {
+  let earliest = -1
+
+  for (const tag of tags) {
+    const idx = findPartialSuffix(buffer, tag)
+    if (idx === -1) continue
+    if (earliest === -1 || idx < earliest) {
+      earliest = idx
+    }
+  }
+
+  return earliest
 }

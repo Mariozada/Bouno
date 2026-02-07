@@ -3,7 +3,13 @@ import { LazyMotion, domAnimation, MotionConfig } from 'motion/react'
 import { useSettings } from '../../hooks/useSettings'
 import { useWorkflowStream } from '../../hooks/useWorkflowStream'
 import type { ThreadMessage } from '../../hooks/useThreads'
-import { validateSettings, PROVIDER_CONFIGS, getModelConfig, type ToolCallInfo } from '@agent/index'
+import {
+  validateSettings,
+  PROVIDER_CONFIGS,
+  getModelConfig,
+  type ToolCallInfo,
+  type AssistantMessageSegment,
+} from '@agent/index'
 import { SettingsPanel } from '../settings'
 import { ErrorNotification, type NotificationError } from '../ErrorNotification'
 import { type AttachmentFile } from '../FileAttachment'
@@ -22,7 +28,14 @@ interface AgentChatProps {
   onAddAssistantMessage?: (threadId?: string, parentId?: string, modelInfo?: { model: string; provider: string }) => Promise<ThreadMessage>
   onUpdateAssistantMessage?: (
     id: string,
-    updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; model?: string; provider?: string }
+    updates: {
+      content?: string
+      reasoning?: string
+      toolCalls?: ToolCallInfo[]
+      assistantSegments?: AssistantMessageSegment[]
+      model?: string
+      provider?: string
+    }
   ) => void
   onClearThread?: () => Promise<void>
   onEditUserMessage?: (messageId: string, newContent: string, attachments?: AttachmentFile[]) => Promise<AddUserMessageResult>
@@ -60,6 +73,7 @@ export const AgentChat: FC<AgentChatProps> = ({
         role: m.role,
         content: m.content,
         toolCalls: m.toolCalls,
+        assistantSegments: m.assistantSegments,
         attachments: m.attachments,
         reasoning: m.reasoning,
         siblingCount: m.siblingCount,

@@ -71,6 +71,20 @@ export interface ToolCallInfo {
   completedAt?: number
 }
 
+export interface AssistantTextSegment {
+  type: 'text'
+  id: string
+  text: string
+}
+
+export interface AssistantToolCallSegment {
+  type: 'tool_call'
+  id: string
+  toolCallId: string
+}
+
+export type AssistantMessageSegment = AssistantTextSegment | AssistantToolCallSegment
+
 /** Direct tool executor for background execution (bypasses chrome.runtime.sendMessage) */
 export type ToolExecutor = (name: string, params: Record<string, unknown>) => Promise<unknown>
 

@@ -4,6 +4,7 @@ import {
   getModelConfig,
   runWorkflow,
   type ToolCallInfo,
+  type AssistantMessageSegment,
   type Message as AgentMessage,
   type ContentPart,
 } from '@agent/index'
@@ -43,7 +44,10 @@ interface Message {
 interface StreamCallbacks {
   onAddUserMessage?: (content: string, attachments?: AttachmentFile[]) => Promise<{ id: string; threadId: string }>
   onAddAssistantMessage?: (threadId?: string, parentId?: string, modelInfo?: { model: string; provider: string }) => Promise<{ id: string }>
-  onUpdateAssistantMessage?: (id: string, updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[] }) => void
+  onUpdateAssistantMessage?: (
+    id: string,
+    updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; assistantSegments?: AssistantMessageSegment[] }
+  ) => void
 }
 
 interface UseWorkflowStreamOptions {
@@ -134,13 +138,46 @@ export function useWorkflowStream({
       let accumulatedText = ''
       let accumulatedReasoning = ''
       const accumulatedToolCalls: ToolCallInfo[] = []
+      const assistantSegments: AssistantMessageSegment[] = []
+      let textSegmentCounter = 0
+
+      const cloneSegments = (): AssistantMessageSegment[] => assistantSegments.map((segment) => ({ ...segment }))
+
+      const appendTextSegment = (delta: string): void => {
+        const lastSegment = assistantSegments[assistantSegments.length - 1]
+        if (lastSegment?.type === 'text') {
+          lastSegment.text += delta
+          return
+        }
+
+        textSegmentCounter += 1
+        assistantSegments.push({
+          type: 'text',
+          id: `txt_${textSegmentCounter}`,
+          text: delta,
+        })
+      }
+
+      const ensureToolSegment = (toolCallId: string): void => {
+        const exists = assistantSegments.some(
+          (segment) => segment.type === 'tool_call' && segment.toolCallId === toolCallId
+        )
+        if (!exists) {
+          assistantSegments.push({
+            type: 'tool_call',
+            id: `tool_${toolCallId}`,
+            toolCallId,
+          })
+        }
+      }
 
       const updateAssistant = () => {
         if (onUpdateAssistantMessage) {
           onUpdateAssistantMessage(assistantMessageId, {
             content: accumulatedText,
             reasoning: accumulatedReasoning,
-            toolCalls: accumulatedToolCalls,
+            toolCalls: [...accumulatedToolCalls],
+            assistantSegments: cloneSegments(),
           })
         }
       }
@@ -163,6 +200,7 @@ export function useWorkflowStream({
         callbacks: {
           onTextDelta: (delta) => {
             accumulatedText += delta
+            appendTextSegment(delta)
             updateAssistant()
           },
           onReasoningDelta: (delta) => {
@@ -173,6 +211,7 @@ export function useWorkflowStream({
             const exists = accumulatedToolCalls.some((tc) => tc.id === toolCall.id)
             if (!exists) {
               accumulatedToolCalls.push(toolCall)
+              ensureToolSegment(toolCall.id)
             }
             updateAssistant()
           },
@@ -200,11 +239,25 @@ export function useWorkflowStream({
         toolCalls: result.toolCalls.length,
       })
 
+      if (assistantSegments.length === 0 && result.text) {
+        textSegmentCounter += 1
+        assistantSegments.push({
+          type: 'text',
+          id: `txt_${textSegmentCounter}`,
+          text: result.text,
+        })
+      }
+
+      for (const toolCall of result.toolCalls) {
+        ensureToolSegment(toolCall.id)
+      }
+
       if (onUpdateAssistantMessage) {
         onUpdateAssistantMessage(assistantMessageId, {
           content: result.text,
           reasoning: accumulatedReasoning,
           toolCalls: result.toolCalls,
+          assistantSegments: cloneSegments(),
         })
       }
 

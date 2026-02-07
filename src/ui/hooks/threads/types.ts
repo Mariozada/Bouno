@@ -1,6 +1,6 @@
 import type { Thread } from '@storage/types'
 import type { AttachmentFile } from '@ui/components/FileAttachment'
-import type { ToolCallInfo } from '@agent/index'
+import type { ToolCallInfo, AssistantMessageSegment } from '@agent/index'
 
 export interface ThreadMessage {
   id: string
@@ -9,6 +9,7 @@ export interface ThreadMessage {
   content: string
   reasoning?: string
   toolCalls?: ToolCallInfo[]
+  assistantSegments?: AssistantMessageSegment[]
   attachments?: AttachmentFile[]
   siblingCount?: number
   siblingIndex?: number
@@ -33,7 +34,14 @@ export interface UseThreadsReturn {
   addAssistantMessage: (threadId?: string, parentId?: string, modelInfo?: { model: string; provider: string }) => Promise<ThreadMessage>
   updateAssistantMessage: (
     id: string,
-    updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; model?: string; provider?: string }
+    updates: {
+      content?: string
+      reasoning?: string
+      toolCalls?: ToolCallInfo[]
+      assistantSegments?: AssistantMessageSegment[]
+      model?: string
+      provider?: string
+    }
   ) => void
   clearCurrentThread: () => Promise<void>
   editUserMessage: (messageId: string, newContent: string, attachments?: AttachmentFile[]) => Promise<AddUserMessageResult>

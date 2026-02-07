@@ -1,4 +1,4 @@
-import type { ToolCallInfo } from '@agent/index'
+import type { ToolCallInfo, AssistantMessageSegment } from '@agent/index'
 
 export interface Thread {
   id: string
@@ -16,6 +16,7 @@ export interface StoredMessage {
   content: string
   reasoning?: string
   toolCalls?: ToolCallInfo[]
+  assistantSegments?: AssistantMessageSegment[]
   attachmentIds?: string[]
   createdAt: number
   // Model info (for assistant messages)

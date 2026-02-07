@@ -21,7 +21,7 @@ import {
   type MessageInput,
 } from '@storage/chatStorage'
 import type { AttachmentFile } from '@ui/components/FileAttachment'
-import type { ToolCallInfo } from '@agent/index'
+import type { ToolCallInfo, AssistantMessageSegment } from '@agent/index'
 import {
   type ThreadMessage,
   type AddUserMessageResult,
@@ -43,7 +43,17 @@ export function useThreads(): UseThreadsReturn {
   const currentThreadIdRef = useRef<string | null>(null)
   const branchStateRef = useRef<Record<string, string>>({})
   const messagesRef = useRef<ThreadMessage[]>([])
-  const pendingUpdateRef = useRef<{ id: string; updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; model?: string; provider?: string } } | null>(null)
+  const pendingUpdateRef = useRef<{
+    id: string
+    updates: {
+      content?: string
+      reasoning?: string
+      toolCalls?: ToolCallInfo[]
+      assistantSegments?: AssistantMessageSegment[]
+      model?: string
+      provider?: string
+    }
+  } | null>(null)
   const rafIdRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -93,6 +103,7 @@ export function useThreads(): UseThreadsReturn {
         content: msg.content,
         reasoning: msg.reasoning,
         toolCalls: msg.toolCalls,
+        assistantSegments: msg.assistantSegments,
         attachments,
         siblingCount: siblings.length,
         siblingIndex,
@@ -238,6 +249,7 @@ export function useThreads(): UseThreadsReturn {
         role: 'assistant',
         content: '',
         toolCalls: [],
+        assistantSegments: [],
         siblingCount: 1,
         siblingIndex: 0,
         model: modelInfo?.model,
@@ -252,7 +264,17 @@ export function useThreads(): UseThreadsReturn {
   )
 
   const updateAssistantMessageAction = useCallback(
-    (id: string, updates: { content?: string; reasoning?: string; toolCalls?: ToolCallInfo[]; model?: string; provider?: string }) => {
+    (
+      id: string,
+      updates: {
+        content?: string
+        reasoning?: string
+        toolCalls?: ToolCallInfo[]
+        assistantSegments?: AssistantMessageSegment[]
+        model?: string
+        provider?: string
+      }
+    ) => {
       pendingUpdateRef.current = { id, updates }
 
       if (rafIdRef.current === null) {
