@@ -44,4 +44,4 @@ All data is stored locally in your browser. You can delete everything at any tim
 
 ## Contact
 
-If you have questions about this privacy policy, please open an issue at: https://github.com/user/Bouno/issues
+If you have questions about this privacy policy, please open an issue at: https://github.com/Mariozada/Bouno/issues
