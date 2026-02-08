@@ -101,8 +101,7 @@ export const AgentChat: FC<AgentChatProps> = ({
     sendEditedMessage,
     removeQueuedAfterToolResult,
     removeQueuedAfterCompletion,
-    clearQueuedAfterToolResult,
-    clearQueuedAfterCompletion,
+    dumpQueues,
     stop,
     clearError,
   } = useWorkflowStream({
@@ -146,6 +145,15 @@ export const AgentChat: FC<AgentChatProps> = ({
     setInputValue('')
     setAttachments([])
   }, [inputValue, attachments, sendMessage])
+
+  const handleEscape = useCallback(() => {
+    const texts = dumpQueues()
+    if (texts.length > 0) {
+      const dumped = texts.join('\n')
+      setInputValue((prev) => prev ? `${prev}\n${dumped}` : dumped)
+    }
+    stop()
+  }, [dumpQueues, stop])
 
   const handleSuggestion = useCallback(
     (text: string) => {
@@ -324,8 +332,7 @@ export const AgentChat: FC<AgentChatProps> = ({
             onQueueAfterCompletion={handleQueueAfterCompletion}
             onRemoveQueuedAfterToolResult={removeQueuedAfterToolResult}
             onRemoveQueuedAfterCompletion={removeQueuedAfterCompletion}
-            onClearQueuedAfterToolResult={clearQueuedAfterToolResult}
-            onClearQueuedAfterCompletion={clearQueuedAfterCompletion}
+            onEscape={handleEscape}
             onStop={stop}
             onToggleReasoning={handleToggleReasoning}
             onCreateShortcut={onCreateShortcut}

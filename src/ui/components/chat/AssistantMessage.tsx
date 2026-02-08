@@ -1,6 +1,6 @@
-import { type FC, useMemo, useState, useEffect, useCallback, type KeyboardEvent } from 'react'
+import { type FC, useMemo, useState } from 'react'
 import * as m from 'motion/react-m'
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, RefreshCw, Sparkles, Square } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, RefreshCw, Square } from 'lucide-react'
 import { MarkdownMessage } from '../MarkdownMessage'
 import { ToolCallDisplay } from '../ToolCallDisplay'
 import { formatToolName } from '../ToolCallDisplay/helpers'
@@ -78,139 +78,38 @@ export const AssistantMessage: FC<AssistantMessageProps> = ({
     }
     return null
   }, [orderedSegments])
-  const orderedToolCallIds = useMemo(() => {
-    const seen = new Set<string>()
-    const ids: string[] = []
+  // Group consecutive tool_call segments into blocks
+  type RenderedBlock =
+    | { type: 'text'; segment: AssistantMessageSegment & { type: 'text' } }
+    | { type: 'tool_group'; toolCallIds: string[]; anchorId: string }
 
-    for (const segment of orderedSegments) {
-      if (segment.type !== 'tool_call') continue
-      if (seen.has(segment.toolCallId)) continue
-      if (!toolCallsById.has(segment.toolCallId)) continue
-      seen.add(segment.toolCallId)
-      ids.push(segment.toolCallId)
-    }
+  const renderedBlocks = useMemo<RenderedBlock[]>(() => {
+    const blocks: RenderedBlock[] = []
+    let currentGroup: { toolCallIds: string[]; anchorId: string } | null = null
 
-    if (ids.length === 0 && toolCalls) {
-      for (const toolCall of toolCalls) {
-        if (seen.has(toolCall.id)) continue
-        seen.add(toolCall.id)
-        ids.push(toolCall.id)
-      }
-    }
-
-    return ids
-  }, [orderedSegments, toolCalls, toolCallsById])
-  const orderedToolCalls = useMemo(
-    () =>
-      orderedToolCallIds
-        .map((toolCallId) => toolCallsById.get(toolCallId))
-        .filter((toolCall): toolCall is ToolCallInfo => toolCall !== undefined),
-    [orderedToolCallIds, toolCallsById]
-  )
-  const firstToolSegmentId = useMemo(() => {
     for (const segment of orderedSegments) {
       if (segment.type === 'tool_call') {
-        return segment.id
+        if (!toolCallsById.has(segment.toolCallId)) continue
+        if (currentGroup) {
+          currentGroup.toolCallIds.push(segment.toolCallId)
+        } else {
+          currentGroup = { toolCallIds: [segment.toolCallId], anchorId: segment.id }
+        }
+      } else {
+        if (currentGroup) {
+          blocks.push({ type: 'tool_group', ...currentGroup })
+          currentGroup = null
+        }
+        blocks.push({ type: 'text', segment: segment as AssistantMessageSegment & { type: 'text' } })
       }
     }
-    return null
-  }, [orderedSegments])
-  const [selectedToolCallId, setSelectedToolCallId] = useState<string | null>(null)
-  const [toolsExpanded, setToolsExpanded] = useState(false)
-
-  const runningToolCount = useMemo(
-    () => orderedToolCalls.filter((toolCall) => toolCall.status === 'running').length,
-    [orderedToolCalls]
-  )
-  const pendingToolCount = useMemo(
-    () => orderedToolCalls.filter((toolCall) => toolCall.status === 'pending').length,
-    [orderedToolCalls]
-  )
-  const completedToolCount = useMemo(
-    () => orderedToolCalls.filter((toolCall) => toolCall.status === 'completed').length,
-    [orderedToolCalls]
-  )
-  const errorToolCount = useMemo(
-    () => orderedToolCalls.filter((toolCall) => toolCall.status === 'error').length,
-    [orderedToolCalls]
-  )
-  const hasActiveTools = runningToolCount > 0 || pendingToolCount > 0
-  const toolSummaryText = useMemo(() => {
-    if (hasActiveTools) {
-      if (runningToolCount > 0 && pendingToolCount > 0) {
-        return `${runningToolCount} running · ${pendingToolCount} pending`
-      }
-      if (runningToolCount > 0) {
-        return `${runningToolCount} running`
-      }
-      return `${pendingToolCount} pending`
+    if (currentGroup) {
+      blocks.push({ type: 'tool_group', ...currentGroup })
     }
+    return blocks
+  }, [orderedSegments, toolCallsById])
 
-    if (errorToolCount > 0 && completedToolCount > 0) {
-      return `${completedToolCount} done · ${errorToolCount} failed`
-    }
-    if (errorToolCount > 0) {
-      return `${errorToolCount} failed`
-    }
-    return `${completedToolCount} completed`
-  }, [completedToolCount, errorToolCount, hasActiveTools, pendingToolCount, runningToolCount])
-
-  useEffect(() => {
-    if (orderedToolCalls.length === 0) {
-      setSelectedToolCallId(null)
-      setToolsExpanded(false)
-      return
-    }
-
-    if (selectedToolCallId && orderedToolCalls.some((toolCall) => toolCall.id === selectedToolCallId)) {
-      return
-    }
-
-    let preferredIndex = orderedToolCalls.length - 1
-    for (let i = orderedToolCalls.length - 1; i >= 0; i--) {
-      const status = orderedToolCalls[i].status
-      if (status === 'running' || status === 'pending') {
-        preferredIndex = i
-        break
-      }
-    }
-
-    setSelectedToolCallId(orderedToolCalls[preferredIndex].id)
-  }, [orderedToolCalls, selectedToolCallId])
-
-  const selectedToolIndex = useMemo(() => {
-    if (!selectedToolCallId) return -1
-    return orderedToolCalls.findIndex((toolCall) => toolCall.id === selectedToolCallId)
-  }, [orderedToolCalls, selectedToolCallId])
-
-  const selectedToolCall = useMemo(() => {
-    if (orderedToolCalls.length === 0) return null
-    if (selectedToolIndex === -1) return orderedToolCalls[orderedToolCalls.length - 1]
-    return orderedToolCalls[selectedToolIndex]
-  }, [orderedToolCalls, selectedToolIndex])
-
-  const moveToolSelection = useCallback(
-    (direction: -1 | 1) => {
-      if (orderedToolCalls.length === 0) return
-      const startIndex = selectedToolIndex === -1 ? orderedToolCalls.length - 1 : selectedToolIndex
-      const nextIndex = (startIndex + direction + orderedToolCalls.length) % orderedToolCalls.length
-      setSelectedToolCallId(orderedToolCalls[nextIndex].id)
-    },
-    [orderedToolCalls, selectedToolIndex]
-  )
-
-  const handleToolRailKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        moveToolSelection(-1)
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault()
-        moveToolSelection(1)
-      }
-    },
-    [moveToolSelection]
-  )
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set())
 
   const isEmptyAssistant = orderedSegments.length === 0
   const showActionBar = isLastMessage || isHovered || isStreaming
@@ -231,126 +130,73 @@ export const AssistantMessage: FC<AssistantMessageProps> = ({
             isStreaming={isStreaming && !hasContent}
           />
         )}
-        {orderedSegments.map((segment) => {
-          if (segment.type === 'text') {
-            if (!segment.text) return null
+        {renderedBlocks.map((block) => {
+          if (block.type === 'text') {
+            if (!block.segment.text) return null
             return (
               <MarkdownMessage
-                key={segment.id}
-                content={segment.text}
-                isStreaming={isStreaming && segment.id === lastTextSegmentId}
+                key={block.segment.id}
+                content={block.segment.text}
+                isStreaming={isStreaming && block.segment.id === lastTextSegmentId}
               />
             )
           }
 
-          const toolCall = toolCallsById.get(segment.toolCallId)
-          if (!toolCall) return null
+          const groupTools = block.toolCallIds
+            .map((id) => toolCallsById.get(id))
+            .filter((tc): tc is ToolCallInfo => tc !== undefined)
+          if (groupTools.length === 0) return null
 
-          if (segment.id !== firstToolSegmentId) {
-            return null
+          const isExpanded = expandedGroupIds.has(block.anchorId)
+
+          // Determine the group's summary status dot
+          const hasRunning = groupTools.some((tc) => tc.status === 'running')
+          const hasPending = groupTools.some((tc) => tc.status === 'pending')
+          const hasError = groupTools.some((tc) => tc.status === 'error')
+          const dotStatus = hasRunning ? 'running' : hasPending ? 'pending' : hasError ? 'error' : 'completed'
+
+          // Label for the collapsed row
+          let collapsedLabel: string
+          if (groupTools.length === 1) {
+            collapsedLabel = formatToolName(groupTools[0].name)
+          } else {
+            const activeTool = groupTools.find((tc) => tc.status === 'running') || groupTools[groupTools.length - 1]
+            collapsedLabel = `${groupTools.length} tools · ${formatToolName(activeTool.name)}`
           }
 
-          const selectedIndexDisplay = selectedToolCall
-            ? Math.max(orderedToolCalls.findIndex((item) => item.id === selectedToolCall.id), 0) + 1
-            : 0
-
           return (
-            <div key={segment.id} className="message-tool-calls">
+            <div key={block.anchorId} className="message-tool-calls">
               <button
                 type="button"
                 className="tool-strip-collapsed"
-                onClick={() => setToolsExpanded((prev) => !prev)}
-                aria-expanded={toolsExpanded}
-                aria-label={toolsExpanded ? 'Collapse tool details' : 'Expand tool details'}
+                onClick={() => setExpandedGroupIds((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(block.anchorId)) {
+                    next.delete(block.anchorId)
+                  } else {
+                    next.add(block.anchorId)
+                  }
+                  return next
+                })}
+                aria-expanded={isExpanded}
               >
                 <span className="tool-strip-collapsed-main">
-                  <Sparkles
-                    size={14}
-                    className={`tool-strip-collapsed-icon${hasActiveTools ? ' is-active' : ''}`}
-                  />
-                  <span className="tool-strip-collapsed-text">
-                    Tool Activity · {toolSummaryText}
-                  </span>
+                  <span className={`tool-strip-chip-dot tool-strip-chip-dot--${dotStatus}`} />
+                  <span className="tool-strip-collapsed-text">{collapsedLabel}</span>
                 </span>
                 <span className="tool-strip-collapsed-right">
-                  {errorToolCount > 0 && (
-                    <span className="tool-strip-collapsed-badge tool-strip-collapsed-badge--error">
-                      {errorToolCount}
-                    </span>
+                  {hasError && (
+                    <span className="tool-strip-collapsed-badge tool-strip-collapsed-badge--error">!</span>
                   )}
-                  {hasActiveTools && (
-                    <span className="tool-strip-collapsed-badge tool-strip-collapsed-badge--active">
-                      {runningToolCount + pendingToolCount}
-                    </span>
-                  )}
-                  {toolsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </span>
               </button>
 
-              {toolsExpanded && (
-                <div
-                  className="tool-strip"
-                  tabIndex={0}
-                  role="group"
-                  aria-label="Tool calls"
-                  onKeyDown={handleToolRailKeyDown}
-                >
-                  <div className="tool-strip-header">
-                    <div className="tool-strip-title-wrap">
-                      <span className="tool-strip-title">Tool Calls</span>
-                      <span className="tool-strip-help">Use ← → to switch</span>
-                    </div>
-                    <div className="tool-strip-nav">
-                      <button
-                        type="button"
-                        className="tool-strip-nav-btn"
-                        onClick={() => moveToolSelection(-1)}
-                        aria-label="Previous tool call"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span className="tool-strip-index">{selectedIndexDisplay}/{orderedToolCalls.length}</span>
-                      <button
-                        type="button"
-                        className="tool-strip-nav-btn"
-                        onClick={() => moveToolSelection(1)}
-                        aria-label="Next tool call"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="tool-strip-row" role="tablist" aria-label="Tool call list">
-                    {orderedToolCalls.map((toolItem) => {
-                      const selected = selectedToolCall?.id === toolItem.id
-                      return (
-                        <button
-                          key={toolItem.id}
-                          type="button"
-                          role="tab"
-                          aria-selected={selected}
-                          className={`tool-strip-chip tool-strip-chip--${toolItem.status}${selected ? ' is-selected' : ''}`}
-                          onClick={() => setSelectedToolCallId(toolItem.id)}
-                          title={formatToolName(toolItem.name)}
-                        >
-                          <span className={`tool-strip-chip-dot tool-strip-chip-dot--${toolItem.status}`} />
-                          <span className="tool-strip-chip-label">{formatToolName(toolItem.name)}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {selectedToolCall && (
-                    <div className="tool-strip-detail">
-                      <ToolCallDisplay
-                        toolCall={selectedToolCall}
-                        defaultExpanded
-                        showHeader={false}
-                        allowCollapse={false}
-                      />
-                    </div>
-                  )}
+              {isExpanded && (
+                <div className="tool-strip-expanded">
+                  {groupTools.map((tc) => (
+                    <ToolCallDisplay key={tc.id} toolCall={tc} />
+                  ))}
                 </div>
               )}
             </div>
