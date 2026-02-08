@@ -96,61 +96,67 @@ export const Divider: FC = () => <div className="tool-divider" />
 
 // ─── Running State Labels ────────────────────────────────────────────────────
 
-/** Consumer-friendly one-liner for the collapsed tool strip. No ref IDs or internal jargon. */
-export function getSummaryLabel(name: string, input: Record<string, unknown>): string {
+/** Consumer-friendly one-liner. Uses past tense for completed/error, present for running/pending. */
+export function getSummaryLabel(name: string, input: Record<string, unknown>, status?: string): string {
+  const done = status === 'completed' || status === 'error'
   switch (name) {
     case 'computer': {
       const action = input.action as string
       const text = input.text as string
       switch (action) {
-        case 'screenshot': return 'Taking a screenshot'
-        case 'zoom': return 'Zooming in'
-        case 'wait': return 'Waiting'
-        case 'left_click': return 'Clicking on the page'
-        case 'right_click': return 'Right-clicking on the page'
-        case 'double_click': return 'Double-clicking on the page'
-        case 'triple_click': return 'Selecting text'
-        case 'type': return text ? `Typing "${str(text, 24)}"` : 'Typing text'
-        case 'key': return text ? `Pressing ${text}` : 'Pressing a key'
+        case 'screenshot': return done ? 'Took a screenshot' : 'Taking a screenshot'
+        case 'zoom': return done ? 'Zoomed in' : 'Zooming in'
+        case 'wait': return done ? `Waited ${input.duration || 1}s` : 'Waiting'
+        case 'left_click': return done ? 'Clicked' : 'Clicking'
+        case 'right_click': return done ? 'Right-clicked' : 'Right-clicking'
+        case 'double_click': return done ? 'Double-clicked' : 'Double-clicking'
+        case 'triple_click': return done ? 'Selected text' : 'Selecting text'
+        case 'type': return done
+          ? (text ? `Typed "${str(text, 24)}"` : 'Typed text')
+          : (text ? `Typing "${str(text, 24)}"` : 'Typing text')
+        case 'key': return done
+          ? (text ? `Pressed ${text}` : 'Pressed a key')
+          : (text ? `Pressing ${text}` : 'Pressing a key')
         case 'scroll': {
           const dir = input.scroll_direction as string
-          return dir === 'up' ? 'Scrolling up' : dir === 'left' || dir === 'right' ? `Scrolling ${dir}` : 'Scrolling down'
+          const direction = dir === 'up' ? 'up' : dir === 'left' || dir === 'right' ? dir : 'down'
+          return done ? `Scrolled ${direction}` : `Scrolling ${direction}`
         }
-        case 'scroll_to': return 'Scrolling to element'
-        case 'hover': return 'Hovering over element'
-        case 'left_click_drag': return 'Dragging element'
-        default: return 'Interacting with page'
+        case 'scroll_to': return done ? 'Scrolled to element' : 'Scrolling to element'
+        case 'hover': return done ? 'Hovered' : 'Hovering'
+        case 'left_click_drag': return done ? 'Dragged element' : 'Dragging element'
+        default: return done ? 'Interacted with page' : 'Interacting with page'
       }
     }
     case 'navigate': {
       const url = input.url as string
-      if (url === 'back') return 'Going back'
-      if (url === 'forward') return 'Going forward'
-      return 'Navigating to page'
+      if (url === 'back') return done ? 'Went back' : 'Going back'
+      if (url === 'forward') return done ? 'Went forward' : 'Going forward'
+      return done ? 'Navigated to page' : 'Navigating to page'
     }
-    case 'find': return `Searching for "${str(input.query, 24)}"`
-    case 'read_page': return 'Reading the page'
-    case 'get_page_text': return 'Extracting page text'
-    case 'form_input': return 'Filling in a form field'
-    case 'tabs_context': return 'Checking open tabs'
-    case 'tabs_create': return 'Opening a new tab'
-    case 'web_fetch': return 'Fetching a page'
-    case 'read_console_messages': return 'Reading console output'
-    case 'read_network_requests': return 'Checking network activity'
-    case 'javascript_tool': return 'Running a script'
-    case 'resize_window': return 'Resizing the window'
+    case 'find': return done ? `Searched for "${str(input.query, 24)}"` : `Searching for "${str(input.query, 24)}"`
+    case 'read_page': return done ? 'Read the page' : 'Reading the page'
+    case 'get_page_text': return done ? 'Extracted page text' : 'Extracting page text'
+    case 'form_input': return done ? 'Filled in a form field' : 'Filling in a form field'
+    case 'tabs_context': return done ? 'Checked open tabs' : 'Checking open tabs'
+    case 'tabs_create': return done ? 'Opened a new tab' : 'Opening a new tab'
+    case 'web_fetch': return done ? 'Fetched a page' : 'Fetching a page'
+    case 'read_console_messages': return done ? 'Read console output' : 'Reading console output'
+    case 'read_network_requests': return done ? 'Checked network activity' : 'Checking network activity'
+    case 'javascript_tool': return done ? 'Ran a script' : 'Running a script'
+    case 'resize_window': return done ? 'Resized the window' : 'Resizing the window'
     case 'gif_creator': {
       const a = input.action as string
-      if (a === 'start_recording') return 'Recording screen'
-      if (a === 'stop_recording') return 'Stopping recording'
-      if (a === 'export') return 'Exporting GIF'
-      return 'Recording'
+      if (a === 'start_recording') return done ? 'Started recording' : 'Recording screen'
+      if (a === 'stop_recording') return done ? 'Stopped recording' : 'Stopping recording'
+      if (a === 'export') return done ? 'Exported GIF' : 'Exporting GIF'
+      return done ? 'Recorded' : 'Recording'
     }
-    case 'update_plan': return 'Updating the plan'
-    case 'invoke_skill': return `Using "${str(input.skill_name, 20)}" skill`
-    case 'upload_image': return 'Uploading an image'
-    case 'read_result': return 'Reading a result'
-    case 'process_result': return 'Processing a result'
+    case 'update_plan': return done ? 'Updated the plan' : 'Updating the plan'
+    case 'invoke_skill': return done ? `Used "${str(input.skill_name, 20)}" skill` : `Using "${str(input.skill_name, 20)}" skill`
+    case 'upload_image': return done ? 'Uploaded an image' : 'Uploading an image'
+    case 'read_result': return done ? 'Read a result' : 'Reading a result'
+    case 'process_result': return done ? 'Processed a result' : 'Processing a result'
     default: return formatToolName(name)
   }
 }
