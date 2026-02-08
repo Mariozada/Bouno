@@ -2,6 +2,7 @@ import type { LanguageModel } from 'ai'
 import type { ToolDefinition } from '@tools/definitions'
 import type { TracingConfig } from '../tracing'
 import type { Skill } from '@skills/types'
+import type { TabInfo } from '@shared/types'
 
 // Content part types for multimodal messages
 export interface TextPart {
@@ -95,6 +96,8 @@ export interface AgentConfig {
   toolExecutor?: ToolExecutor
   /** Delay in seconds after tools that cause page changes (default: 0.5) */
   postToolDelay?: number
+  /** Returns the current list of tabs in the agent's group. Called before each LLM call to inject fresh tab context. */
+  getTabContext?: () => Promise<TabInfo[]>
 }
 
 export interface AgentSession {
@@ -159,6 +162,8 @@ export interface AgentOptions {
   reasoningEnabled?: boolean  // Enable streaming reasoning/thinking
   geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
   toolExecutor?: ToolExecutor  // Direct executor for background runs
+  /** Returns the current list of tabs in the agent's group */
+  getTabContext?: () => Promise<TabInfo[]>
 
   // Skills
   activeSkill?: {

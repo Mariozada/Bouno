@@ -449,6 +449,11 @@ export function useWorkflowStream({
         availableSkills: skillOptions?.availableSkills,
         // Post-tool delay
         postToolDelay: settings.postToolDelay,
+        // Inject fresh tab context before each LLM call
+        getTabContext: async () => {
+          const tabs = await chrome.tabs.query(groupId !== undefined ? { groupId } : {})
+          return tabs.map((t) => ({ id: t.id!, title: t.title || '', url: t.url || '', audible: t.audible }))
+        },
         // Pass MCP tools to workflow
         mcpTools: mcpOptions?.mcpTools,
         // Route MCP tool calls to the MCP manager

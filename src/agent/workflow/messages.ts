@@ -1,4 +1,5 @@
-import type { StepResult, ToolExecutionResult, AgentSession } from './types'
+import type { StepResult, ToolExecutionResult, AgentSession, Message } from './types'
+import type { TabInfo } from '@shared/types'
 import { formatToolResults } from '../xmlParser'
 import { appendAssistantMessage, appendUserMessage } from './session'
 
@@ -27,6 +28,34 @@ export function buildToolResultsMessage(toolResults: ToolExecutionResult[]): str
   return formatToolResults(
     toolResults.map(tr => ({ name: tr.toolCall.name, result: tr.result }))
   )
+}
+
+function renderTabsList(tabs: TabInfo[], currentTabId: number): string {
+  const lines = [`<tabs_list current="${currentTabId}">`]
+  for (const tab of tabs) {
+    const attrs = [`id="${tab.id}"`, `title="${tab.title}"`, `url="${tab.url}"`]
+    if (tab.audible) attrs.push('audible')
+    lines.push(`  <tab ${attrs.join(' ')} />`)
+  }
+  lines.push('</tabs_list>')
+  return lines.join('\n')
+}
+
+/** Append fresh tab context to the last user message in the session. */
+export function injectTabContext(messages: Message[], tabs: TabInfo[], currentTabId: number): void {
+  const tabsXml = renderTabsList(tabs, currentTabId)
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== 'user') continue
+    const msg = messages[i]
+
+    if (typeof msg.content === 'string') {
+      msg.content = msg.content + '\n\n' + tabsXml
+    } else {
+      msg.content = [...msg.content, { type: 'text', text: '\n\n' + tabsXml }]
+    }
+    return
+  }
 }
 
 export function appendStepMessages(

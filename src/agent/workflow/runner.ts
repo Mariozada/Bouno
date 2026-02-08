@@ -9,7 +9,7 @@ import type {
 import { createSession, isAborted } from './session'
 import { streamLLMResponse, hasToolCalls } from './stream'
 import { ToolQueue, getToolCallsFromResults } from './tools'
-import { appendStepMessages } from './messages'
+import { appendStepMessages, injectTabContext } from './messages'
 import { clearOutputs } from '@shared/outputStore'
 import { getTracer, type SpanContext, type TracingConfig } from '../tracing'
 
@@ -66,6 +66,16 @@ async function executeStep(options: ExecuteStepOptions): Promise<{ shouldContinu
       parentContext: stepSpan.context,
     } : undefined,
   })
+
+  // Inject fresh tab context into the last user message before each LLM call
+  if (session.config.getTabContext) {
+    try {
+      const tabs = await session.config.getTabContext()
+      injectTabContext(session.messages, tabs, session.config.tabId)
+    } catch (err) {
+      log('Failed to get tab context:', err)
+    }
+  }
 
   // Stream LLM response — tool calls are pushed into the queue as they're parsed
   const stepResult = await streamLLMResponse(session, {

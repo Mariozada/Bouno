@@ -3,7 +3,6 @@ import type { Skill } from '@skills/types'
 
 export interface RenderOptions {
   tools: ToolDefinition[]
-  tabId?: number
   vision?: boolean
   activeSkill?: {
     skill: Skill
@@ -50,13 +49,6 @@ Here are the cheapest wireless headphones I found:
 </communication>`
 }
 
-function renderTabContext(tabId: number): string {
-  return `<tab-context>
-- Starting tabId: ${tabId} — pass this to all tab-targeting tools unless you intentionally switch tabs.
-- Use list_tabs to discover other tab IDs in your group before operating on them.
-</tab-context>`
-}
-
 function renderToolCallFormat(): string {
   return `<tool-format>
 Emit <invoke>...</invoke> blocks in your response. You can include narration text before, between, and after tool calls.
@@ -88,6 +80,8 @@ function renderWorkflow(): string {
 2. Read: Use read_page before interacting to understand the page and get element refs. Use find when looking for something specific, get_page_text when you need raw text content.
 3. Act: Use refs from the accessibility tree to interact. Prefer form_input for setting input values — it's more reliable than typing. Use computer for clicks, keyboard shortcuts, scrolling, and screenshots.
 4. Verify: After important actions (navigation, form submission), use read_page or screenshot to confirm the result.
+
+Tab context: Each user message includes a <tabs_list current="tabId"> block listing all tabs in your group with their IDs, URLs, and titles. Use the "current" attribute as the default tabId for tools. The list is refreshed before each turn, so always refer to the latest one.
 </workflow>
 
 <accessibility-tree>
@@ -150,7 +144,7 @@ function renderBestPractices(vision?: boolean): string {
     '- Dynamic content: If an element isn\'t found, the page might still be loading. Use computer with action: "wait" or re-read the page.',
     '- Stale refs: After navigation or major page changes, old refs are invalid. Always re-read the page to get fresh refs.',
     '- Error recovery: If an action fails, re-read the page to understand the current state before retrying. Don\'t retry the same action blindly.',
-    '- Tab management: Favor using the current tab. For multi-site workflows (comparing, copying between pages), use the current tab for the first site and open new tabs for additional ones. If it\'s ambiguous whether to open a new tab or navigate the current one, ask the user.',
+    '- Tab management: Favor using the current tab (marked in <tabs_list>). For multi-site workflows (comparing, copying between pages), use the current tab for the first site and open new tabs for additional ones. If it\'s ambiguous whether to open a new tab or navigate the current one, ask the user.',
     '- New tabs: After create_tab, wait for its result to get the new tab ID before using it. Never assume a tab ID — always use the one returned by the tool.',
   ]
 
@@ -211,7 +205,6 @@ export function renderSystemPrompt(toolsOrOptions: ToolDefinition[] | RenderOpti
 
   const sections: string[] = [
     renderRole(),
-    ...(options.tabId !== undefined ? [renderTabContext(options.tabId)] : []),
     renderToolCallFormat(),
     renderWorkflow(),
     renderBestPractices(options.vision),

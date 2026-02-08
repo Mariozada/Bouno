@@ -21,13 +21,14 @@ export const navigationTools: ToolDefinition[] = [
     enabled: true,
     category: 'navigation'
   },
-  {
-    name: 'list_tabs',
-    description: 'List all open tabs in your group with their IDs, URLs, and titles.',
-    parameters: [],
-    enabled: true,
-    category: 'navigation'
-  },
+  // list_tabs removed — tab context is now injected into user messages automatically
+  // {
+  //   name: 'list_tabs',
+  //   description: 'List all open tabs in your group with their IDs, URLs, and titles.',
+  //   parameters: [],
+  //   enabled: true,
+  //   category: 'navigation'
+  // },
   {
     name: 'create_tab',
     description: 'Create a new browser tab (opens in background). Returns the new tab ID.',

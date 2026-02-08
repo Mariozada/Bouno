@@ -188,7 +188,8 @@ async function webFetch(params: { url: string }): Promise<{
 }
 
 export function registerTabTools(): void {
-  registerTool('list_tabs', tabsContext as (params: Record<string, unknown>) => Promise<unknown>)
+  // list_tabs removed — tab context is now injected into user messages automatically
+  // registerTool('list_tabs', tabsContext as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('create_tab', tabsCreate as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('navigate', navigate as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('resize_window', resizeWindow as (params: Record<string, unknown>) => Promise<unknown>)
