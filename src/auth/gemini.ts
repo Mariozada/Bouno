@@ -454,10 +454,12 @@ export function createGeminiFetch(
           ...init,
           body: JSON.stringify(wrappedBody),
         }
-        console.log('[Gemini:Fetch] Wrapped request in Code Assist format')
+        console.log('[Gemini:Fetch] Wrapped request body:', JSON.stringify(wrappedBody, null, 2).slice(0, 500))
       } catch (e) {
         console.warn('[Gemini:Fetch] Could not parse request body:', e)
       }
+    } else {
+      console.log('[Gemini:Fetch] No body transformation - modelName:', modelName, 'hasBody:', !!init?.body, 'projectId:', auth.projectId)
     }
 
     const response = await fetch(url, {
@@ -466,6 +468,17 @@ export function createGeminiFetch(
     })
 
     console.log('[Gemini:Fetch] Response:', response.status, response.statusText)
+
+    // Log error details for non-OK responses
+    if (!response.ok) {
+      const clonedResponse = response.clone()
+      try {
+        const errorText = await clonedResponse.text()
+        console.error('[Gemini:Fetch] Error response body:', errorText)
+      } catch (e) {
+        console.error('[Gemini:Fetch] Could not read error body')
+      }
+    }
 
     return response
   }
