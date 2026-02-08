@@ -73,7 +73,7 @@ export function truncUrl(url: string, max = 60): string {
 export function formatJson(value: unknown): string {
   try {
     if (typeof value === 'string') return value
-    return JSON.stringify(value, null, 2) || 'null'
+    return JSON.stringify(value) || 'null'
   } catch {
     return '[Unable to display JSON]'
   }

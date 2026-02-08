@@ -42,6 +42,7 @@ const LEGACY_TOOL_CALL_WRAPPER_TAGS = [
 const TOOL_XML_START_TAGS = [INVOKE_OPEN, ...LEGACY_TOOL_CALL_WRAPPER_TAGS]
 
 let domParser: DOMParser | null = null
+let globalToolCallCounter = 0
 
 function getDOMParser(): DOMParser {
   if (!domParser) domParser = new DOMParser()
@@ -56,7 +57,6 @@ export class XMLStreamParser {
   private buffer = ''
   private textBuffer = ''
   private listeners: Map<StreamEventType | '*', EventListener[]> = new Map()
-  private toolCallCounter = 0
 
   processChunk(chunk: string): void {
     this.buffer += chunk
@@ -172,7 +172,7 @@ export class XMLStreamParser {
       }
     }
 
-    const id = `tc_${++this.toolCallCounter}`
+    const id = `tc_${++globalToolCallCounter}`
     const toolCall: ToolCallEvent = { id, name, params }
     this._emit({ type: STREAM_EVENT_TYPES.TOOL_CALL_START, data: toolCall })
     this._emit({ type: STREAM_EVENT_TYPES.TOOL_CALL_DONE, data: toolCall })

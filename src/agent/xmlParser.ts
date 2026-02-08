@@ -2,7 +2,7 @@ import { isLargeOutput, storeOutput, formatStoredPreview } from '@shared/outputS
 
 export function formatToolResults(results: { name: string; result: unknown }[]): string {
   const inner = results.map(r => {
-    const output = typeof r.result === 'string' ? r.result : JSON.stringify(r.result, null, 2)
+    const output = typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
 
     if (isLargeOutput(output)) {
       const id = storeOutput(r.name, output)

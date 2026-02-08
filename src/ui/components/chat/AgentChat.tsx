@@ -309,7 +309,7 @@ export const AgentChat: FC<AgentChatProps> = ({
             onNavigateBranch={handleNavigateBranch}
             onCopyMessage={handleCopyMessage}
             onRetry={handleRegenerate}
-            onStop={stop}
+            onStop={handleEscape}
             onSuggestionClick={handleSuggestion}
           />
 
@@ -333,7 +333,7 @@ export const AgentChat: FC<AgentChatProps> = ({
             onRemoveQueuedAfterToolResult={removeQueuedAfterToolResult}
             onRemoveQueuedAfterCompletion={removeQueuedAfterCompletion}
             onEscape={handleEscape}
-            onStop={stop}
+            onStop={handleEscape}
             onToggleReasoning={handleToggleReasoning}
             onCreateShortcut={onCreateShortcut}
           />

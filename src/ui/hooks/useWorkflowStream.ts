@@ -96,6 +96,7 @@ interface UseWorkflowStreamReturn {
   removeQueuedAfterCompletion: (id: string) => void
   clearQueuedAfterToolResult: () => void
   clearQueuedAfterCompletion: () => void
+  dumpQueues: () => string[]
   stop: () => void
   clearError: () => void
 }
@@ -277,6 +278,25 @@ export function useWorkflowStream({
     if (afterCompletionQueueRef.current.length === 0) return
     afterCompletionQueueRef.current = []
     syncQueueCounts()
+  }, [syncQueueCounts])
+
+  const dumpQueues = useCallback((): string[] => {
+    const texts: string[] = []
+
+    if (afterCompletionQueueRef.current.length > 0) {
+      const merged = afterCompletionQueueRef.current.map((m) => m.text).join('\n')
+      if (merged.trim()) texts.push(merged)
+      afterCompletionQueueRef.current = []
+    }
+
+    if (afterToolResultQueueRef.current.length > 0) {
+      const merged = afterToolResultQueueRef.current.map((m) => m.text).join('\n')
+      if (merged.trim()) texts.push(merged)
+      afterToolResultQueueRef.current = []
+    }
+
+    syncQueueCounts()
+    return texts
   }, [syncQueueCounts])
 
   const runAgentWorkflow = useCallback(
@@ -694,6 +714,7 @@ export function useWorkflowStream({
     removeQueuedAfterCompletion,
     clearQueuedAfterToolResult,
     clearQueuedAfterCompletion,
+    dumpQueues,
     stop,
     clearError,
   }

@@ -149,7 +149,7 @@ async function webFetch(params: { url: string }): Promise<{
     let content: string
     if (contentType.includes('application/json')) {
       const json = await response.json()
-      content = JSON.stringify(json, null, 2)
+      content = JSON.stringify(json)
     } else {
       content = await response.text()
     }
