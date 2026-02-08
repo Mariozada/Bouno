@@ -437,24 +437,24 @@ export function createGeminiFetch(
     url = parsedUrl.toString()
     console.log('[Gemini:Fetch] Final URL:', url)
 
-    // Transform request body to include project ID and model
+    // Transform request body to Code Assist format
     let modifiedInit = init
     if (modelName && init?.body && auth.projectId) {
       try {
-        const body = JSON.parse(init.body as string)
+        const originalBody = JSON.parse(init.body as string)
 
-        // Wrap with cloudaicompanionProject and model
+        // Wrap in Code Assist format: { project, model, request: {...} }
         const wrappedBody = {
-          cloudaicompanionProject: auth.projectId,
+          project: auth.projectId,
           model: modelName,
-          ...body,
+          request: originalBody,
         }
 
         modifiedInit = {
           ...init,
           body: JSON.stringify(wrappedBody),
         }
-        console.log('[Gemini:Fetch] Added project and model to request body')
+        console.log('[Gemini:Fetch] Wrapped request in Code Assist format')
       } catch (e) {
         console.warn('[Gemini:Fetch] Could not parse request body:', e)
       }
