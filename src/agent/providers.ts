@@ -8,6 +8,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { ProviderSettings } from '@shared/settings'
 import { wrapWithDebugMiddleware } from './debugMiddleware'
+import { createCodexFetch, isTokenExpired, refreshAccessToken, createCodexAuth, CODEX_API_ENDPOINT } from '@auth/codex'
+import type { CodexAuth } from '@auth/types'
+import { loadSettings, saveSettings } from '@shared/settings'
 
 const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[Agent:Provider]', ...args)
@@ -65,6 +68,55 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Create a Codex-enabled OpenAI provider
+ * Uses OAuth tokens instead of API key
+ */
+function createCodexProvider(settings: ProviderSettings): LanguageModel {
+  if (!settings.codexAuth) {
+    throw new ProviderError('Codex authentication required')
+  }
+
+  log('Creating Codex provider with model:', settings.model)
+
+  // Create custom fetch that handles OAuth and URL rewriting
+  const codexFetch = createCodexFetch(
+    // Get current auth
+    async () => {
+      const currentSettings = await loadSettings()
+      return currentSettings.codexAuth
+    },
+    // Update auth after refresh
+    async (newAuth: CodexAuth) => {
+      const currentSettings = await loadSettings()
+      currentSettings.codexAuth = newAuth
+      await saveSettings(currentSettings)
+      log('Codex auth updated after token refresh')
+    }
+  )
+
+  // Create OpenAI provider with Codex fetch
+  const openai = createOpenAI({
+    apiKey: 'codex-oauth', // Placeholder, actual auth is in fetch
+    baseURL: CODEX_API_ENDPOINT.replace('/responses', ''), // Base URL without endpoint
+    fetch: async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      log('[Codex] Fetching:', url.toString())
+      try {
+        const response = await codexFetch(url, init)
+        log('[Codex] Response status:', response.status)
+        return response
+      } catch (error) {
+        logError('[Codex] Fetch error:', error)
+        throw error
+      }
+    },
+  })
+
+  const model = openai(settings.model)
+  log('Codex model created:', model)
+  return wrapWithDebugMiddleware(model)
+}
+
 export function createProvider(settings: ProviderSettings): LanguageModel {
   log('createProvider called with:', {
     provider: settings.provider,
@@ -75,9 +127,15 @@ export function createProvider(settings: ProviderSettings): LanguageModel {
 
   const apiKey = settings.apiKeys[settings.provider]
 
+  // Allow OpenAI without API key if using Codex OAuth
   if (!apiKey && settings.provider !== 'openai-compatible') {
-    logError('No API key for provider:', settings.provider)
-    throw new ProviderError(`No API key configured for ${settings.provider}`)
+    if (settings.provider === 'openai' && settings.codexAuth) {
+      // Codex OAuth is available, will be used instead
+      log('Using Codex OAuth instead of API key')
+    } else {
+      logError('No API key for provider:', settings.provider)
+      throw new ProviderError(`No API key configured for ${settings.provider}`)
+    }
   }
 
   try {
@@ -96,6 +154,12 @@ export function createProvider(settings: ProviderSettings): LanguageModel {
       }
 
       case 'openai': {
+        // Check if using Codex OAuth
+        if (settings.codexAuth) {
+          log('Creating OpenAI provider with Codex OAuth...')
+          return createCodexProvider(settings)
+        }
+
         log('Creating OpenAI provider...')
         const openai = createOpenAI({
           apiKey,
@@ -181,13 +245,18 @@ export function createProvider(settings: ProviderSettings): LanguageModel {
 }
 
 export function validateSettings(settings: ProviderSettings): string | null {
-  if (settings.provider !== 'openai-compatible') {
-    if (!settings.apiKeys[settings.provider]) {
-      return `Please enter your ${settings.provider} API key`
-    }
-  } else {
+  if (settings.provider === 'openai-compatible') {
     if (!settings.openaiCompatible?.baseURL) {
       return 'Please enter the base URL for your OpenAI-compatible provider'
+    }
+  } else if (settings.provider === 'openai') {
+    // OpenAI can use either API key or Codex OAuth
+    if (!settings.apiKeys[settings.provider] && !settings.codexAuth) {
+      return 'Please enter your OpenAI API key or login with ChatGPT'
+    }
+  } else {
+    if (!settings.apiKeys[settings.provider]) {
+      return `Please enter your ${settings.provider} API key`
     }
   }
 

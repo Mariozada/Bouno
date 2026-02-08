@@ -1,8 +1,9 @@
-import { type FC, type ChangeEvent } from 'react'
-import { Zap, Image, Eye, EyeOff } from 'lucide-react'
+import { type FC, type ChangeEvent, useState } from 'react'
+import { Zap, Image, Eye, EyeOff, LogIn, LogOut, Loader2 } from 'lucide-react'
 import type { ProviderSettings, ProviderType } from '@shared/settings'
 import { PROVIDER_CONFIGS, getModelsForProvider } from '@agent/index'
 import { CustomSelect } from '../CustomSelect'
+import { MessageTypes } from '@shared/messages'
 
 interface ProviderTabProps {
   settings: ProviderSettings
@@ -18,6 +19,7 @@ interface ProviderTabProps {
   onCustomVisionChange: (e: ChangeEvent<HTMLInputElement>) => void
   onCustomReasoningChange: (e: ChangeEvent<HTMLInputElement>) => void
   onToggleShowApiKey: () => void
+  onCodexAuthChange?: () => void  // Callback to refresh settings after auth change
 }
 
 export const ProviderTab: FC<ProviderTabProps> = ({
@@ -34,11 +36,47 @@ export const ProviderTab: FC<ProviderTabProps> = ({
   onCustomVisionChange,
   onCustomReasoningChange,
   onToggleShowApiKey,
+  onCodexAuthChange,
 }) => {
-  const models = getModelsForProvider(settings.provider)
+  const [codexLoading, setCodexLoading] = useState(false)
+  const [codexError, setCodexError] = useState<string | null>(null)
+
+  const hasCodexAuth = !!settings.codexAuth
+  const models = getModelsForProvider(settings.provider, hasCodexAuth)
   const currentProviderConfig = PROVIDER_CONFIGS[settings.provider]
   const currentApiKey = settings.apiKeys[settings.provider] || ''
   const isOpenAICompatible = settings.provider === 'openai-compatible'
+  const isOpenAI = settings.provider === 'openai'
+
+  const handleCodexLogin = async () => {
+    setCodexLoading(true)
+    setCodexError(null)
+    try {
+      const response = await chrome.runtime.sendMessage({ type: MessageTypes.CODEX_OAUTH_START })
+      if (!response.success) {
+        setCodexError(response.error || 'Login failed')
+      } else {
+        onCodexAuthChange?.()
+      }
+    } catch (err) {
+      setCodexError((err as Error).message)
+    } finally {
+      setCodexLoading(false)
+    }
+  }
+
+  const handleCodexLogout = async () => {
+    setCodexLoading(true)
+    setCodexError(null)
+    try {
+      await chrome.runtime.sendMessage({ type: MessageTypes.CODEX_OAUTH_LOGOUT })
+      onCodexAuthChange?.()
+    } catch (err) {
+      setCodexError((err as Error).message)
+    } finally {
+      setCodexLoading(false)
+    }
+  }
 
   return (
     <>
@@ -57,6 +95,49 @@ export const ProviderTab: FC<ProviderTabProps> = ({
         </select>
         <span className="help-text">{currentProviderConfig.description}</span>
       </div>
+
+      {/* Codex OAuth section for OpenAI */}
+      {isOpenAI && (
+        <div className="form-group codex-auth-section">
+          <label>ChatGPT Login</label>
+          {hasCodexAuth ? (
+            <div className="codex-logged-in">
+              <span className="codex-status">Logged in with ChatGPT</span>
+              <button
+                type="button"
+                className="button-secondary codex-logout-btn"
+                onClick={handleCodexLogout}
+                disabled={codexLoading}
+              >
+                {codexLoading ? (
+                  <Loader2 size={14} className="spinning" />
+                ) : (
+                  <LogOut size={14} />
+                )}
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="button-primary codex-login-btn"
+              onClick={handleCodexLogin}
+              disabled={codexLoading}
+            >
+              {codexLoading ? (
+                <Loader2 size={14} className="spinning" />
+              ) : (
+                <LogIn size={14} />
+              )}
+              Login with ChatGPT Pro/Plus
+            </button>
+          )}
+          {codexError && <span className="error-text">{codexError}</span>}
+          <span className="help-text">
+            Use your ChatGPT subscription instead of an API key. Unlocks Codex models.
+          </span>
+        </div>
+      )}
 
       <div className="form-group">
         <div className="label-row">
@@ -159,7 +240,7 @@ export const ProviderTab: FC<ProviderTabProps> = ({
       <div className="form-group">
         <label htmlFor="api-key">
           API Key
-          {isOpenAICompatible && ' (optional)'}
+          {(isOpenAICompatible || (isOpenAI && hasCodexAuth)) && ' (optional)'}
         </label>
         <div className="input-with-button">
           <input

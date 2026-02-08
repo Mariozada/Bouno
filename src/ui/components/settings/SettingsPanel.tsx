@@ -43,6 +43,7 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
     handleCustomVisionChange,
     handleCustomReasoningChange,
     handleTracingUpdate,
+    handleCodexAuthChange,
     getSettingsToSave,
   } = useSettingsForm(settings)
 
@@ -163,6 +164,7 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
                   onCustomVisionChange={handleCustomVisionChange}
                   onCustomReasoningChange={handleCustomReasoningChange}
                   onToggleShowApiKey={() => setShowApiKey(!showApiKey)}
+                  onCodexAuthChange={handleCodexAuthChange}
                 />
                 {error && <div className="error-message">{error}</div>}
                 {renderActions()}
