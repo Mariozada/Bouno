@@ -2,6 +2,23 @@ import { registerTool } from '../registry'
 import type { TabInfo } from '@shared/types'
 import { tabGroups } from '@background/tabGroups'
 
+function waitForTabLoad(tabId: number, timeoutMs = 15000): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener)
+      resolve()
+    }, timeoutMs)
+    const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+      if (id === tabId && info.status === 'complete') {
+        clearTimeout(timer)
+        chrome.tabs.onUpdated.removeListener(listener)
+        resolve()
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener)
+  })
+}
+
 async function tabsContext(params: { groupId?: number }): Promise<{ tabs: TabInfo[] }> {
   const { groupId } = params
 
@@ -32,16 +49,21 @@ async function tabsCreate(params: { url?: string; groupId?: number }): Promise<T
     url: url || 'about:blank'
   })
 
+  if (url && tab.id) {
+    await waitForTabLoad(tab.id)
+  }
+
   if (groupId !== undefined && tab.id) {
     await tabGroups.addTabToGroup(tab.id, groupId)
   }
 
+  const loaded = tab.id ? await chrome.tabs.get(tab.id) : tab
   return {
-    id: tab.id!,
-    title: tab.title || '',
-    url: tab.url || '',
-    active: tab.active,
-    windowId: tab.windowId
+    id: loaded.id!,
+    title: loaded.title || '',
+    url: loaded.url || '',
+    active: loaded.active,
+    windowId: loaded.windowId
   }
 }
 
@@ -81,7 +103,7 @@ async function navigate(params: { url: string; tabId: number }): Promise<{
   }
 
   await chrome.tabs.update(tabId, { url: normalizedUrl })
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await waitForTabLoad(tabId)
 
   const tab = await chrome.tabs.get(tabId)
   return {
