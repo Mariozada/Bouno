@@ -50,7 +50,7 @@ export const readingTools: ToolDefinition[] = [
   },
   {
     name: 'find',
-    description: 'Find elements using natural language. More targeted than read_page when you know what you\'re looking for.',
+    description: 'Find elements using natural language. Faster than read_page when you know what you\'re looking for.',
     parameters: [
       {
         name: 'tabId',
@@ -95,20 +95,6 @@ export const readingTools: ToolDefinition[] = [
         type: 'string',
         description: 'Regex pattern to filter lines',
         required: false
-      }
-    ],
-    enabled: true,
-    category: 'reading'
-  },
-  {
-    name: 'web_fetch',
-    description: 'Fetch raw content from a URL. Use for APIs or when you need HTML/JSON rather than the rendered page.',
-    parameters: [
-      {
-        name: 'url',
-        type: 'string',
-        description: 'URL to fetch',
-        required: true
       }
     ],
     enabled: true,

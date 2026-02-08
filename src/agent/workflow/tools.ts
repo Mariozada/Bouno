@@ -11,8 +11,8 @@ const TOOLS_WITH_DELAY = new Set([
   'navigate',
   'computer',
   'form_input',
-  'run_javascript',
-  'create_tab',
+  'javascript_tool',
+  'tabs_create',
 ])
 
 /** Computer actions that are read-only and don't need a delay */

@@ -52,7 +52,7 @@ function renderTabContext(tabId: number): string {
   return `## Tab Context
 
 - Starting tabId: \`${tabId}\` — pass this to all tab-targeting tools unless you intentionally switch tabs.
-- Use \`list_tabs\` to discover other tab IDs in your group before operating on them.`
+- Use \`tabs_context\` to discover other tab IDs in your group before operating on them.`
 }
 
 function renderToolCallFormat(): string {

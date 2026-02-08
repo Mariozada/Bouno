@@ -6,7 +6,7 @@ async function tabsContext(params: { groupId?: number }): Promise<{ tabs: TabInf
   const { groupId } = params
 
   if (groupId === undefined) {
-    throw new Error('list_tabs requires groupId')
+    throw new Error('tabs_context requires groupId')
   }
   const tabs = await chrome.tabs.query({ groupId })
 
@@ -172,8 +172,8 @@ async function webFetch(params: { url: string }): Promise<{
 }
 
 export function registerTabTools(): void {
-  registerTool('list_tabs', tabsContext as (params: Record<string, unknown>) => Promise<unknown>)
-  registerTool('create_tab', tabsCreate as (params: Record<string, unknown>) => Promise<unknown>)
+  registerTool('tabs_context', tabsContext as (params: Record<string, unknown>) => Promise<unknown>)
+  registerTool('tabs_create', tabsCreate as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('navigate', navigate as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('resize_window', resizeWindow as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('web_fetch', webFetch as (params: Record<string, unknown>) => Promise<unknown>)

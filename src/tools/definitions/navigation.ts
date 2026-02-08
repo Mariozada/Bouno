@@ -22,14 +22,14 @@ export const navigationTools: ToolDefinition[] = [
     category: 'navigation'
   },
   {
-    name: 'list_tabs',
+    name: 'tabs_context',
     description: 'List all open tabs in your group with their IDs, URLs, and titles.',
     parameters: [],
     enabled: true,
     category: 'navigation'
   },
   {
-    name: 'create_tab',
+    name: 'tabs_create',
     description: 'Create a new browser tab (opens in background). Returns the new tab ID.',
     parameters: [
       {
@@ -62,6 +62,20 @@ export const navigationTools: ToolDefinition[] = [
         name: 'height',
         type: 'number',
         description: 'Height in pixels',
+        required: true
+      }
+    ],
+    enabled: true,
+    category: 'navigation'
+  },
+  {
+    name: 'web_fetch',
+    description: 'Fetch raw content from a URL. Use for APIs or when you need HTML/JSON rather than the rendered page.',
+    parameters: [
+      {
+        name: 'url',
+        type: 'string',
+        description: 'URL to fetch',
         required: true
       }
     ],
