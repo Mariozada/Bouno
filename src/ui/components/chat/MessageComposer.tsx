@@ -6,7 +6,7 @@ import {
   useEffect,
   useCallback,
 } from 'react'
-import { ArrowUp, Brain, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Brain, Square, X } from 'lucide-react'
 import { ComposerMenu } from '../ComposerMenu'
 import { AttachmentPreview } from '../AttachmentPreview'
 import type { AttachmentFile } from '../FileAttachment'
@@ -37,8 +37,7 @@ interface MessageComposerProps {
   onQueueAfterCompletion: () => void
   onRemoveQueuedAfterToolResult: (id: string) => void
   onRemoveQueuedAfterCompletion: (id: string) => void
-  onClearQueuedAfterToolResult: () => void
-  onClearQueuedAfterCompletion: () => void
+  onEscape: () => void
   onStop: () => void
   onToggleReasoning: () => void
   onCreateShortcut?: () => void
@@ -64,8 +63,7 @@ export const MessageComposer: FC<MessageComposerProps> = ({
   onQueueAfterCompletion,
   onRemoveQueuedAfterToolResult,
   onRemoveQueuedAfterCompletion,
-  onClearQueuedAfterToolResult,
-  onClearQueuedAfterCompletion,
+  onEscape,
   onStop,
   onToggleReasoning,
   onCreateShortcut,
@@ -105,6 +103,12 @@ export const MessageComposer: FC<MessageComposerProps> = ({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Escape' && isStreaming) {
+        e.preventDefault()
+        onEscape()
+        return
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         if (isStreaming) {
@@ -124,7 +128,7 @@ export const MessageComposer: FC<MessageComposerProps> = ({
         }
       }
     },
-    [canQueue, canSend, isStreaming, onQueueAfterCompletion, onQueueAfterToolResult, onSubmit]
+    [canQueue, canSend, isStreaming, onEscape, onQueueAfterCompletion, onQueueAfterToolResult, onSubmit]
   )
 
   const handleFilesSelected = useCallback(
@@ -188,29 +192,17 @@ export const MessageComposer: FC<MessageComposerProps> = ({
             )}
           </div>
           {isStreaming ? (
-            <div className="aui-composer-stream-actions">
-              <button
-                type="button"
-                className="aui-composer-send"
-                onClick={onQueueAfterToolResult}
-                disabled={!canQueue}
-                aria-label="Queue after next tool result"
-                title="Queue after next tool result (Enter)"
-              >
-                <ArrowUp size={16} />
-              </button>
-              <button
-                type="button"
-                className="aui-composer-cancel"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onStop()
-                }}
-                aria-label="Stop generation"
-              >
-                <Square size={14} />
-              </button>
-            </div>
+            <button
+              type="button"
+              className="aui-composer-cancel"
+              onClick={(e) => {
+                e.stopPropagation()
+                onStop()
+              }}
+              aria-label="Stop generation"
+            >
+              <Square size={14} />
+            </button>
           ) : (
             <button
               type="submit"
@@ -222,7 +214,7 @@ export const MessageComposer: FC<MessageComposerProps> = ({
             </button>
           )}
         </div>
-        {isStreaming && (
+        {isStreaming && canQueue && (
           <div className="aui-composer-queue-bar" role="status" aria-live="polite">
             <button
               type="button"
@@ -254,74 +246,34 @@ export const MessageComposer: FC<MessageComposerProps> = ({
         )}
         {isStreaming && hasQueuedMessages && (
           <div className="aui-composer-queue-list">
-            {queuedAfterToolResult.length > 0 && (
-              <div className="aui-composer-queue-group">
-                <div className="aui-composer-queue-group-head">
-                  <span className="aui-composer-queue-group-label">Next</span>
-                  <button
-                    type="button"
-                    className="aui-composer-queue-clear-btn"
-                    onClick={onClearQueuedAfterToolResult}
-                    aria-label="Clear next queue"
-                    title="Clear queue"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-                <div className="aui-composer-queue-items">
-                  {queuedAfterToolResult.map((item) => (
-                    <span key={item.id} className="aui-composer-queue-item">
-                      <span className="aui-composer-queue-item-text">
-                        {item.preview}
-                        {item.attachmentCount > 0 && ` (+${item.attachmentCount} attachment${item.attachmentCount > 1 ? 's' : ''})`}
-                      </span>
-                      <button
-                        type="button"
-                        className="aui-composer-queue-item-remove"
-                        onClick={() => onRemoveQueuedAfterToolResult(item.id)}
-                        aria-label="Remove queued message"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {queuedAfterCompletion.length > 0 && (
-              <div className="aui-composer-queue-group">
-                <div className="aui-composer-queue-group-head">
-                  <span className="aui-composer-queue-group-label">Done</span>
-                  <button
-                    type="button"
-                    className="aui-composer-queue-clear-btn"
-                    onClick={onClearQueuedAfterCompletion}
-                    aria-label="Clear completion queue"
-                    title="Clear queue"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-                <div className="aui-composer-queue-items">
-                  {queuedAfterCompletion.map((item) => (
-                    <span key={item.id} className="aui-composer-queue-item">
-                      <span className="aui-composer-queue-item-text">
-                        {item.preview}
-                        {item.attachmentCount > 0 && ` (+${item.attachmentCount} attachment${item.attachmentCount > 1 ? 's' : ''})`}
-                      </span>
-                      <button
-                        type="button"
-                        className="aui-composer-queue-item-remove"
-                        onClick={() => onRemoveQueuedAfterCompletion(item.id)}
-                        aria-label="Remove queued message"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            {queuedAfterToolResult.map((item) => (
+              <span key={item.id} className="aui-composer-queue-item">
+                <span className="aui-composer-queue-item-tag">next</span>
+                <span className="aui-composer-queue-item-text">{item.preview}</span>
+                <button
+                  type="button"
+                  className="aui-composer-queue-item-remove"
+                  onClick={() => onRemoveQueuedAfterToolResult(item.id)}
+                  aria-label="Remove queued message"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            {queuedAfterCompletion.map((item) => (
+              <span key={item.id} className="aui-composer-queue-item">
+                <span className="aui-composer-queue-item-tag aui-composer-queue-item-tag--done">done</span>
+                <span className="aui-composer-queue-item-text">{item.preview}</span>
+                <button
+                  type="button"
+                  className="aui-composer-queue-item-remove"
+                  onClick={() => onRemoveQueuedAfterCompletion(item.id)}
+                  aria-label="Remove queued message"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
           </div>
         )}
       </div>
