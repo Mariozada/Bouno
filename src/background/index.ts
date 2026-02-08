@@ -14,6 +14,7 @@ import { switchGlowToTab, hideAllGlowsWithMinimum, cleanupGlowForTab } from './g
 import { autoCaptureGifFrame } from './gifCapture'
 import { startCodexOAuth, logoutCodex, cancelCodexOAuth } from './codexOAuth'
 import { startGeminiOAuth, logoutGemini, setupGeminiOAuthListener } from './geminiOAuth'
+import './relayClient'
 
 registerAllHandlers()
 setupGeminiOAuthListener()

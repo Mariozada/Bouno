@@ -646,6 +646,23 @@
   font-size: 10px;
 }
 
+/* ─── API Config Blocks ──────────────────────────────────────────────────── */
+
+.api-config-block {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+  user-select: all;
+}
+
 /* ─── Codex OAuth ─────────────────────────────────────────────────────────── */
 
 .codex-auth-section {
