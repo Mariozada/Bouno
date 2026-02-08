@@ -32,8 +32,6 @@ const CODE_ASSIST_HEADERS = {
   'Client-Metadata': 'ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI',
 }
 
-// Default location for Gemini API
-const DEFAULT_LOCATION = 'us-central1'
 
 // Scopes required for Gemini API access via cloudcode-pa endpoint
 export const GEMINI_SCOPES = [
@@ -343,9 +341,9 @@ export function createGeminiAuth(tokens: GeminiTokenResponse, email?: string, pr
  * Create custom fetch function for Gemini API
  * Handles OAuth headers, URL rewriting, and token refresh
  *
- * Transforms requests to use Vertex AI-style paths with cloudcode-pa.googleapis.com
+ * Transforms requests to use cloudcode-pa.googleapis.com internal API format
  * Example: /v1beta/models/gemini-2.5-pro:streamGenerateContent
- *       -> /v1/projects/{project}/locations/us-central1/publishers/google/models/gemini-2.5-pro:streamGenerateContent
+ *       -> /v1internal:streamGenerateContent (with model/project in body)
  */
 export function createGeminiFetch(
   getAuth: () => Promise<GeminiAuth | undefined>,
@@ -414,20 +412,21 @@ export function createGeminiFetch(
     // Remove the API key query parameter that @ai-sdk/google adds
     parsedUrl.searchParams.delete('key')
 
-    // Transform generativelanguage.googleapis.com to Vertex AI-style path on cloudcode-pa
+    // Transform generativelanguage.googleapis.com to cloudcode-pa internal API
+    let modelName: string | undefined
     if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       // Extract model and action from path like /v1beta/models/gemini-2.5-pro:streamGenerateContent
-      const pathMatch = parsedUrl.pathname.match(/\/v\d+(?:beta)?\/models\/([^:]+):?(.*)/)
+      const pathMatch = parsedUrl.pathname.match(/\/v\d+(?:beta)?\/models\/([^:]+):(\w+)/)
 
       if (pathMatch) {
         const [, model, action] = pathMatch
-        // Build Vertex AI-style path
-        const vertexPath = `/v1/projects/${auth.projectId}/locations/${DEFAULT_LOCATION}/publishers/google/models/${model}${action ? ':' + action : ''}`
+        modelName = model
 
+        // Use v1internal:{action} format (how opencode-gemini-auth does it)
         parsedUrl.hostname = 'cloudcode-pa.googleapis.com'
-        parsedUrl.pathname = vertexPath
+        parsedUrl.pathname = `/v1internal:${action}`
 
-        console.log('[Gemini:Fetch] Transformed to Vertex AI path:', parsedUrl.pathname)
+        console.log('[Gemini:Fetch] Transformed to v1internal path:', parsedUrl.pathname, 'model:', model)
       } else {
         // Fallback: just change hostname
         parsedUrl.hostname = 'cloudcode-pa.googleapis.com'
@@ -438,8 +437,31 @@ export function createGeminiFetch(
     url = parsedUrl.toString()
     console.log('[Gemini:Fetch] Final URL:', url)
 
+    // Transform request body to include project ID and model
+    let modifiedInit = init
+    if (modelName && init?.body && auth.projectId) {
+      try {
+        const body = JSON.parse(init.body as string)
+
+        // Wrap with cloudaicompanionProject and model
+        const wrappedBody = {
+          cloudaicompanionProject: auth.projectId,
+          model: modelName,
+          ...body,
+        }
+
+        modifiedInit = {
+          ...init,
+          body: JSON.stringify(wrappedBody),
+        }
+        console.log('[Gemini:Fetch] Added project and model to request body')
+      } catch (e) {
+        console.warn('[Gemini:Fetch] Could not parse request body:', e)
+      }
+    }
+
     const response = await fetch(url, {
-      ...init,
+      ...modifiedInit,
       headers,
     })
 
