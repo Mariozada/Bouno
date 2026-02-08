@@ -6,7 +6,11 @@ Browser automation Chrome extension. Control web pages using natural language th
 
 ## Demo
 
-https://github.com/user-attachments/assets/8ad8ca1d-06d0-42b5-808b-6b8cee1c1a49
+
+
+https://github.com/user-attachments/assets/1d5c45dd-f63b-49b4-a938-1865869e6d7b
+
+
 
 ## Features
 
