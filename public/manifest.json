@@ -30,6 +30,7 @@
     "sidePanel",
     "scripting",
     "webRequest",
+    "webNavigation",
     "debugger",
     "identity"
   ],
