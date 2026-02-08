@@ -191,6 +191,16 @@ export const MessageComposer: FC<MessageComposerProps> = ({
               </button>
             )}
           </div>
+          {isStreaming && canQueue && (
+            <button
+              type="button"
+              className="aui-composer-send"
+              onClick={onQueueAfterToolResult}
+              aria-label="Queue message"
+            >
+              <ArrowUp size={16} />
+            </button>
+          )}
           {isStreaming ? (
             <button
               type="button"

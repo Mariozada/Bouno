@@ -98,7 +98,8 @@ export const Divider: FC = () => <div className="tool-divider" />
 
 /** Consumer-friendly one-liner. Uses past tense for completed/error, present for running/pending. */
 export function getSummaryLabel(name: string, input: Record<string, unknown>, status?: string): string {
-  const done = status === 'completed' || status === 'error'
+  // Only use present tense if explicitly running or pending; otherwise past tense
+  const done = status !== 'running' && status !== 'pending'
   switch (name) {
     case 'computer': {
       const action = input.action as string
