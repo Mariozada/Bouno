@@ -24,14 +24,14 @@ export const DEVICE_VERIFICATION_URL = 'https://auth.openai.com/codex/device'
 // Safety margin for polling to avoid rate limiting (matches OpenCode)
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
-// Allowed Codex models
+// Allowed Codex models (matches OpenCode)
 export const CODEX_MODELS = new Set([
-  'gpt-5.1-codex-max',
-  'gpt-5.1-codex-mini',
-  'gpt-5.2',
-  'gpt-5.2-codex',
   'gpt-5.3-codex',
+  'gpt-5.2-codex',
+  'gpt-5.2',
+  'gpt-5.1-codex-max',
   'gpt-5.1-codex',
+  'gpt-5.1-codex-mini',
 ])
 
 /**
