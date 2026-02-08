@@ -72,7 +72,7 @@ export const debuggingTools: ToolDefinition[] = [
     category: 'debugging'
   },
   {
-    name: 'javascript_tool',
+    name: 'run_javascript',
     description: 'Execute JavaScript in the page context. Use as a last resort when other tools can\'t achieve the task.',
     parameters: [
       {

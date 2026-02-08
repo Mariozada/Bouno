@@ -139,14 +139,14 @@ export function getSummaryLabel(name: string, input: Record<string, unknown>, st
     case 'read_page': return done ? 'Read the page' : 'Reading the page'
     case 'get_page_text': return done ? 'Extracted page text' : 'Extracting page text'
     case 'form_input': return done ? 'Filled in a form field' : 'Filling in a form field'
-    case 'tabs_context': return done ? 'Checked open tabs' : 'Checking open tabs'
-    case 'tabs_create': return done ? 'Opened a new tab' : 'Opening a new tab'
-    case 'web_fetch': return done ? 'Fetched a page' : 'Fetching a page'
+    case 'list_tabs': return done ? 'Checked open tabs' : 'Checking open tabs'
+    case 'create_tab': return done ? 'Opened a new tab' : 'Opening a new tab'
+    case 'fetch_url': return done ? 'Fetched a page' : 'Fetching a page'
     case 'read_console_messages': return done ? 'Read console output' : 'Reading console output'
     case 'read_network_requests': return done ? 'Checked network activity' : 'Checking network activity'
-    case 'javascript_tool': return done ? 'Ran a script' : 'Running a script'
+    case 'run_javascript': return done ? 'Ran a script' : 'Running a script'
     case 'resize_window': return done ? 'Resized the window' : 'Resizing the window'
-    case 'gif_creator': {
+    case 'record_gif': {
       const a = input.action as string
       if (a === 'start_recording') return done ? 'Started recording' : 'Recording screen'
       if (a === 'stop_recording') return done ? 'Stopped recording' : 'Stopping recording'
@@ -195,14 +195,14 @@ export function getRunningLabel(name: string, input: Record<string, unknown>): s
     case 'read_page': return input.ref_id ? `Reading ${input.ref_id}` : `Reading page (${input.filter || 'all'})`
     case 'get_page_text': return 'Extracting page text'
     case 'form_input': return `Setting ${input.ref} to "${str(input.value, 20)}"`
-    case 'tabs_context': return 'Listing tabs'
-    case 'tabs_create': return input.url ? `Opening ${truncUrl(input.url as string, 30)}` : 'Opening new tab'
-    case 'web_fetch': return `Fetching ${truncUrl(input.url as string || '', 40)}`
+    case 'list_tabs': return 'Listing tabs'
+    case 'create_tab': return input.url ? `Opening ${truncUrl(input.url as string, 30)}` : 'Opening new tab'
+    case 'fetch_url': return `Fetching ${truncUrl(input.url as string || '', 40)}`
     case 'read_console_messages': return 'Reading console'
     case 'read_network_requests': return 'Reading network requests'
-    case 'javascript_tool': return 'Executing JavaScript'
+    case 'run_javascript': return 'Executing JavaScript'
     case 'resize_window': return `Resizing to ${input.width}x${input.height}`
-    case 'gif_creator': {
+    case 'record_gif': {
       const a = input.action as string
       if (a === 'start_recording') return 'Starting recording'
       if (a === 'stop_recording') return 'Stopping recording'

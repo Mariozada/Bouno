@@ -107,7 +107,7 @@ export const readingTools: ToolDefinition[] = [
       {
         name: 'result_id',
         type: 'string',
-        description: 'ID of the stored output (e.g., "web_fetch_3")',
+        description: 'ID of the stored output (e.g., "fetch_url_3")',
         required: true
       },
       {

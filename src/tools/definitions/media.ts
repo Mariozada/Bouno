@@ -2,7 +2,7 @@ import type { ToolDefinition } from './types'
 
 export const mediaTools: ToolDefinition[] = [
   {
-    name: 'gif_creator',
+    name: 'record_gif',
     description: 'Record and export GIF animations across all tabs in the current agent group.',
     parameters: [
       {

@@ -239,7 +239,7 @@ async function javascriptTool(params: {
     })
 
     if (!granted) {
-      throw new Error('Debugger permission was denied. javascript_tool requires debugger permission to run code on this page.')
+      throw new Error('Debugger permission was denied. run_javascript requires debugger permission to run code on this page.')
     }
   }
 
@@ -325,5 +325,5 @@ async function javascriptTool(params: {
 export function registerDebuggingTools(): void {
   registerTool('read_console_messages', readConsoleMessages as (params: Record<string, unknown>) => Promise<unknown>)
   registerTool('read_network_requests', readNetworkRequests as (params: Record<string, unknown>) => Promise<unknown>)
-  registerTool('javascript_tool', javascriptTool as (params: Record<string, unknown>) => Promise<unknown>)
+  registerTool('run_javascript', javascriptTool as (params: Record<string, unknown>) => Promise<unknown>)
 }
