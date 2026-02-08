@@ -116,12 +116,17 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
   },
 }
 
-export function getModelsForProvider(provider: ProviderType, hasCodexAuth?: boolean): ModelConfig[] {
+export function getModelsForProvider(provider: ProviderType, codexModeOnly?: boolean): ModelConfig[] {
   const models = PROVIDER_CONFIGS[provider]?.models || []
 
-  // Filter Codex-only models if not authenticated with Codex
-  if (provider === 'openai' && !hasCodexAuth) {
-    return models.filter((m) => !m.codexOnly)
+  if (provider === 'openai') {
+    if (codexModeOnly) {
+      // ChatGPT Login mode: show ONLY Codex models
+      return models.filter((m) => m.codexOnly)
+    } else {
+      // API Key mode: show only non-Codex models
+      return models.filter((m) => !m.codexOnly)
+    }
   }
 
   return models
