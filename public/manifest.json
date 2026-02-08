@@ -29,9 +29,7 @@
     "alarms",
     "sidePanel",
     "scripting",
-    "webRequest"
-  ],
-  "optional_permissions": [
+    "webRequest",
     "debugger"
   ],
   "content_security_policy": {
