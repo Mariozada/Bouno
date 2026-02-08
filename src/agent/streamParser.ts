@@ -143,7 +143,7 @@ export class XMLStreamParser {
   }
 
   private _emitTextDelta(text: string): void {
-    if (!text) return
+    if (!text || !text.trim()) return
     this.textBuffer += text
     this._emit({ type: STREAM_EVENT_TYPES.TEXT_DELTA, data: text })
   }
