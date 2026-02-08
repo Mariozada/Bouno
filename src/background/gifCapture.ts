@@ -76,7 +76,7 @@ export async function autoCaptureGifFrame(
   if (!isGifRecordingActive()) return
 
   let tabId = params.tabId as number | undefined
-  if (!tabId && tool === 'tabs_create') {
+  if (!tabId && tool === 'create_tab') {
     tabId = (result?.result as { id?: number } | undefined)?.id
   }
   if (!tabId) return

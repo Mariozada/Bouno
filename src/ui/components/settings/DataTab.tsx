@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, type FC } from 'react'
-import { Download, Upload, Trash2, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { exportAndDownload, readImportFile, importChats, type ImportResult } from '@storage/chatExport'
 
 interface DataTabProps {
@@ -10,7 +10,6 @@ export const DataTab: FC<DataTabProps> = ({ onRefreshThreads }) => {
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleExport = useCallback(async () => {

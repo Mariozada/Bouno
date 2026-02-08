@@ -1,7 +1,6 @@
 import type { AgentSession, AgentOptions, Message } from './types'
 import { renderSystemPrompt } from '@prompts/render'
 import { getEnabledToolDefinitions } from '@tools/definitions'
-import { setCurrentTabId, setCurrentGroupId } from '../tools'
 
 let sessionCounter = 0
 
@@ -23,9 +22,6 @@ export function createSession(options: AgentOptions): AgentSession {
     mcpTools,
     postToolDelay,
   } = options
-
-  setCurrentTabId(tabId)
-  setCurrentGroupId(groupId)
 
   const hasSkills = (availableSkills && availableSkills.length > 0) || activeSkill
   const toolDefinitions = getEnabledToolDefinitions().filter(

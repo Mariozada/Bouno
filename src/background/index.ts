@@ -327,8 +327,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const result = await executeTool(tool, params)
       console.log(`[Bouno:background] EXECUTE_TOOL result:`, result)
 
-      // For tabs_create, glow the newly created tab
-      if (tool === 'tabs_create' && result.success && result.result) {
+      // For create_tab, glow the newly created tab
+      if (tool === 'create_tab' && result.success && result.result) {
         const newTabId = (result.result as { id?: number }).id
         if (newTabId) {
           switchGlowToTab(newTabId)

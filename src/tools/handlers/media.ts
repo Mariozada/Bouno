@@ -455,10 +455,10 @@ async function gifCreator(params: {
     }
 
     default:
-      throw new Error(`Unknown gif_creator action: ${action}`)
+      throw new Error(`Unknown record_gif action: ${action}`)
   }
 }
 
 export function registerMediaTools(): void {
-  registerTool('gif_creator', gifCreator as (params: Record<string, unknown>) => Promise<unknown>)
+  registerTool('record_gif', gifCreator as (params: Record<string, unknown>) => Promise<unknown>)
 }

@@ -6,9 +6,7 @@
 
 import type { Skill, SkillInvocation } from './types'
 import {
-  getAllSkills,
   getEnabledSkills,
-  getSkillByName,
   installSkill,
   getSkillsBySource,
   storedSkillToSkill,
@@ -170,7 +168,6 @@ export function parseSkillArguments(
   // Try to parse key=value pairs
   const kvRegex = /(\w+)=(?:"([^"]*)"|'([^']*)'|(\S+))/g
   let match: RegExpExecArray | null
-  let lastIndex = 0
   let hasKvPairs = false
 
   while ((match = kvRegex.exec(trimmed)) !== null) {
@@ -178,7 +175,6 @@ export function parseSkillArguments(
     const key = match[1]
     const value = match[2] ?? match[3] ?? match[4] ?? ''
     result[key] = value
-    lastIndex = kvRegex.lastIndex
   }
 
   // If no key=value pairs and we have skill argument definitions,

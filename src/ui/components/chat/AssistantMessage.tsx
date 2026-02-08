@@ -26,10 +26,6 @@ const ToolGroupPanel: FC<ToolGroupPanelProps> = ({ toolCalls }) => {
     () => toolCalls.filter((tc) => tc.status === 'pending').length,
     [toolCalls]
   )
-  const completedToolCount = useMemo(
-    () => toolCalls.filter((tc) => tc.status === 'completed').length,
-    [toolCalls]
-  )
   const errorToolCount = useMemo(
     () => toolCalls.filter((tc) => tc.status === 'error').length,
     [toolCalls]

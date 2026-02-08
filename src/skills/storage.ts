@@ -7,7 +7,7 @@
 import { db } from '@storage/db'
 import type { StoredSkill, SkillSource, SkillInput, Skill } from './types'
 import { generateSkillId } from './types'
-import { parseSkillContent, validateParsedSkill, serializeSkill } from './parser'
+import { parseSkillContent, validateParsedSkill } from './parser'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[SkillStorage]', ...args)

@@ -21,7 +21,7 @@ export function storeOutput(toolName: string, output: string): string {
   return id
 }
 
-export function formatStoredPreview(id: string, toolName: string, output: string): string {
+export function formatStoredPreview(id: string, _toolName: string, output: string): string {
   const lines = outputStore.get(id)
   if (!lines) return output
 

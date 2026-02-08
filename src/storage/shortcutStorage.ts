@@ -1,5 +1,5 @@
 import { db } from './db'
-import type { ScheduledShortcut, ShortcutSchedule } from './types'
+import type { ScheduledShortcut } from './types'
 import { generateId } from './types'
 
 export async function createShortcut(

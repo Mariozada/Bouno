@@ -3,7 +3,7 @@ import type { ToolDefinition } from './types'
 export const interactionTools: ToolDefinition[] = [
   {
     name: 'computer',
-    description: 'Perform mouse and keyboard actions on the page.',
+    description: 'Perform mouse and keyboard actions: click, type, press keys, scroll, hover, drag, take screenshots, and wait.',
     parameters: [
       {
         name: 'tabId',
