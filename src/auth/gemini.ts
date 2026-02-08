@@ -478,8 +478,106 @@ export function createGeminiFetch(
       } catch (e) {
         console.error('[Gemini:Fetch] Could not read error body')
       }
+      return response
+    }
+
+    // Transform streaming response from cloudcode-pa format
+    // cloudcode-pa returns: data: {"response": {...actual response...}}
+    // AI SDK expects: data: {...actual response...}
+    const isStreaming = url.includes('alt=sse') || response.headers.get('content-type')?.includes('text/event-stream')
+
+    if (isStreaming && response.body) {
+      console.log('[Gemini:Fetch] Transforming streaming response')
+      const transformedBody = transformStreamingResponse(response.body)
+      return new Response(transformedBody, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      })
     }
 
     return response
+  }
+}
+
+/**
+ * Transform streaming response from cloudcode-pa format to standard Gemini format
+ * Each SSE line: data: {"response": {...}} -> data: {...}
+ */
+function transformStreamingResponse(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ''
+
+  return new ReadableStream({
+    async start(controller) {
+      const reader = body.getReader()
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+
+          if (done) {
+            // Process any remaining buffer
+            if (buffer.trim()) {
+              const transformed = transformSSELine(buffer)
+              if (transformed) {
+                controller.enqueue(encoder.encode(transformed))
+              }
+            }
+            controller.close()
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true })
+
+          // Process complete lines
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            const transformed = transformSSELine(line)
+            controller.enqueue(encoder.encode(transformed + '\n'))
+          }
+        }
+      } catch (error) {
+        console.error('[Gemini:Fetch] Stream transform error:', error)
+        controller.error(error)
+      }
+    },
+  })
+}
+
+/**
+ * Transform a single SSE line from cloudcode-pa format
+ */
+function transformSSELine(line: string): string {
+  // Keep non-data lines as-is (empty lines, event: lines, etc.)
+  if (!line.startsWith('data: ')) {
+    return line
+  }
+
+  const jsonStr = line.slice(6) // Remove 'data: ' prefix
+
+  // Handle [DONE] marker
+  if (jsonStr.trim() === '[DONE]') {
+    return line
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr)
+
+    // If wrapped in "response", extract it
+    if (parsed.response) {
+      const unwrapped = JSON.stringify(parsed.response)
+      console.log('[Gemini:Fetch] Unwrapped response:', unwrapped.slice(0, 200))
+      return 'data: ' + unwrapped
+    }
+
+    // Already in correct format
+    return line
+  } catch {
+    // Not valid JSON, return as-is
+    return line
   }
 }
